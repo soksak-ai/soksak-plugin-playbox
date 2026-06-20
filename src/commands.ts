@@ -2,6 +2,7 @@
 // 사이트 지식 0(R2) — 해석은 resolveUrl(yt-dlp 위임). 라이브러리는 app.data 만(R4).
 import { resolveUrl, type SpawnFn } from "@/resolve";
 import { makeSpawn } from "@/spawn";
+import { runDownload } from "@/download";
 import { classify, fmtTime } from "@/util";
 import type { LibraryStore } from "@/store";
 
@@ -151,6 +152,26 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
     },
   });
 
+  reg("download", {
+    description:
+      "미디어를 로컬 mp4 로 저장 — 코어 프록시 경유 HLS/직접/로컬을 ffmpeg 로 묶음. 전체 또는 [startSec,endSec] 구간. yt-dlp 비개입(해석만). iframe(YouTube 해석 실패)은 저장 불가. ffmpeg 필요.",
+    params: {
+      inputUrl: { type: "string", description: "비디오 URL/경로", required: true },
+      outPath: { type: "string", description: "저장 절대경로(.mp4)", required: true },
+      startSec: { type: "number", description: "구간 시작 초(생략=전체)" },
+      endSec: { type: "number", description: "구간 종료 초" },
+    },
+    returns: "{ ok, path }",
+    danger: "inject",
+    handler: async (p: any) =>
+      runDownload(app, spawn, {
+        inputUrl: String(p?.inputUrl ?? ""),
+        outPath: String(p?.outPath ?? ""),
+        startSec: typeof p?.startSec === "number" ? p.startSec : undefined,
+        endSec: typeof p?.endSec === "number" ? p.endSec : undefined,
+      }),
+  });
+
   reg("doctor", {
     description: "외부 의존성(yt-dlp, ffmpeg) 탐지·버전 보고. ready = yt-dlp 사용 가능 여부. read-only.",
     params: {},
@@ -160,7 +181,7 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
         probe(spawn, "yt-dlp", ["--version"]),
         probe(spawn, "ffmpeg", ["-version"]),
       ]);
-      return { ytdlp, ffmpeg, ready: ytdlp.found, note: ffmpeg.found ? undefined : "ffmpeg 는 다운로드/클립컷에만 필요" };
+      return { ytdlp, ffmpeg, ready: ytdlp.found, note: ffmpeg.found ? undefined : "ffmpeg 는 download(전체/구간 저장)에만 필요 — 재생엔 불요" };
     },
   });
 
