@@ -1,7 +1,34 @@
 import { describe, it, expect } from "vitest";
 import { buildFfmpegArgs, runDownload } from "./download";
 import { proxiedUrl } from "./proxy";
+import { resolveFull } from "./resolveFull";
 import type { SpawnFn, SpawnResult } from "./resolve";
+
+// ── resolveFull: yt-dlp → webview 폴백(단일 진실, 재생·다운로드 공통) ──────────
+describe("resolveFull", () => {
+  const failYtdlp: SpawnFn = () => Promise.resolve({ code: 1, stdout: "", stderr: "HTTP 403 cloudflare" });
+  it("yt-dlp 실패 http 페이지 → webview 스니프(hidden)로 m3u8", async () => {
+    const app = {
+      settings: { get: (k: string) => (k === "extractMode" ? "hidden" : k === "sniffTimeoutMs" ? 5000 : undefined) },
+      commands: {
+        execute: (m: string) =>
+          m === "browser.media.extract"
+            ? Promise.resolve({ urls: [{ url: "https://cdn.site/s/play.m3u8" }] })
+            : Promise.resolve({}),
+      },
+    };
+    const { resolved } = await resolveFull(app, "https://example.com/video/123", failYtdlp);
+    expect(resolved.kind).toBe("hls");
+    expect(resolved.source).toBe("webview");
+    expect(String(resolved.mediaUrl)).toContain("play.m3u8");
+  });
+  it("직접 m3u8 → webview 거치지 않음(직접 경로)", async () => {
+    const app = { settings: { get: () => undefined }, commands: { execute: () => Promise.resolve({}) } };
+    const { resolved } = await resolveFull(app, "https://cdn.example/v/play.m3u8", failYtdlp);
+    expect(resolved.kind).toBe("hls");
+    expect(resolved.source).toBe("direct");
+  });
+});
 
 // ── proxiedUrl: ua 생략(ffmpeg URL 파서 깨짐 방지) ───────────────────────────
 describe("proxiedUrl omitUa", () => {
