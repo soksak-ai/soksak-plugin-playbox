@@ -47152,7 +47152,7 @@ var plugin_entry_default = {
       ctx.subscriptions.push(
         app.commands.register("ping", {
           description: "\uD50C\uB7EC\uADF8\uC778 \uC801\uC7AC/\uBC84\uC804 \uD655\uC778(E2E)",
-          handler: async () => ({ ok: true, plugin: "soksak-playbox", version: "0.1.0", phase: "M1" })
+          handler: async () => ({ ok: true, plugin: "soksak-plugin-media-player", version: "0.0.1", phase: "M1" })
         })
       );
       registerCommands(ctx, store, app);

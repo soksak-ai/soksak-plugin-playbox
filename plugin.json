@@ -1,12 +1,12 @@
 {
   "spec": "soksak-spec-plugin@0.0.1",
-  "id": "soksak-playbox",
+  "id": "soksak-plugin-media-player",
   "name": {
-    "ko": "플레이박스",
-    "en": "Playbox"
+    "ko": "미디어 플레이어",
+    "en": "Media Player"
   },
   "version": "0.0.1",
-  "repo": "https://github.com/soksak-ai/soksak-playbox.git",
+  "repo": "https://github.com/soksak-ai/soksak-plugin-media-player.git",
   "description": {
     "ko": "비디오 라이브러리·플레이어 — 즐겨찾기·클립. YouTube·로컬 파일·직접 미디어 URL·임의 웹페이지(yt-dlp 경유)를 재생하고, 보호된 HLS 는 코어 미디어 프록시로 스트리밍.",
     "en": "Video library and player — favorites and clips. Plays YouTube, local files, direct media URLs, and arbitrary web pages (via yt-dlp); protected HLS is streamed through the core media proxy."
