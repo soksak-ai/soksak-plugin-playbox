@@ -67,6 +67,19 @@
         "ko": "웹페이지에서 미디어 스트림을 추출할 때 최대 대기 시간.",
         "en": "Maximum wait when extracting a media stream from a web page."
       }
+    },
+    {
+      "key": "downloadDir",
+      "type": "string",
+      "default": "",
+      "title": {
+        "ko": "다운로드 폴더",
+        "en": "Download folder"
+      },
+      "description": {
+        "ko": "다운로드를 저장할 폴더(절대경로). 비어 있으면 다운로드 버튼이 폴더 지정을 요청합니다.",
+        "en": "Absolute folder where downloads are saved. If empty, the download button asks you to set it first."
+      }
     }
   ],
   "permissions": [
@@ -171,6 +184,14 @@
         }
       },
       {
+        "name": "download",
+        "title": {
+          "ko": "다운로드",
+          "en": "Download"
+        },
+        "danger": "inject"
+      },
+      {
         "name": "doctor",
         "title": {
           "ko": "의존성 점검",
@@ -263,6 +284,13 @@
         "description": {
           "en": "Close current media",
           "ko": "현재 미디어 닫기"
+        }
+      },
+      {
+        "id": "download",
+        "description": {
+          "en": "Download current media (full or marked clip)",
+          "ko": "현재 미디어 저장(전체 또는 표시 구간)"
         }
       },
       {

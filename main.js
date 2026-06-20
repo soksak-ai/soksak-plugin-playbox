@@ -46132,9 +46132,8 @@ function attachHls(video, src) {
   };
 }
 
-// src/view/PlayerView.tsx
-var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
-async function proxied(app, r) {
+// src/proxy.ts
+async function proxiedUrl(app, r) {
   if (!r.needsProxy || !r.mediaUrl) return r.mediaUrl ?? "";
   try {
     const out = await app.commands.execute("media.proxy.info");
@@ -46149,6 +46148,9 @@ async function proxied(app, r) {
     return r.mediaUrl;
   }
 }
+
+// src/view/PlayerView.tsx
+var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 function PlayerView({ app, store }) {
   const [media, setMedia] = (0, import_react.useState)(null);
   const [currentInput, setCurrentInput] = (0, import_react.useState)(null);
@@ -46186,7 +46188,7 @@ function PlayerView({ app, store }) {
         setMedia({ mode: "video", src: r.filePath, title: r.title });
         return;
       }
-      const src = await proxied(app, r);
+      const src = await proxiedUrl(app, r);
       setMedia({ mode: r.kind === "hls" ? "hls" : "video", src, title: r.title });
     },
     [app]
@@ -46257,6 +46259,33 @@ function PlayerView({ app, store }) {
     }
     setClipStart(null);
   }, [app, clipStart, currentInput, showFlash]);
+  const downloadCurrent = (0, import_react.useCallback)(async () => {
+    if (!currentInput) {
+      showFlash("\uC7AC\uC0DD \uC911\uC778 \uC785\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4");
+      return;
+    }
+    const dir = String(app?.settings?.get?.("downloadDir") ?? "").trim();
+    if (!dir) {
+      showFlash("\uC124\uC815\uC5D0\uC11C \uB2E4\uC6B4\uB85C\uB4DC \uD3F4\uB354\uB97C \uBA3C\uC800 \uC9C0\uC815\uD558\uC138\uC694");
+      return;
+    }
+    const t = videoRef.current?.currentTime ?? null;
+    const isClip = clipStart != null && t != null && Math.abs(t - clipStart) >= 0.1;
+    const startSec = isClip ? Math.min(clipStart, t) : void 0;
+    const endSec = isClip ? Math.max(clipStart, t) : void 0;
+    const base = (media?.title || "video").replace(/[^\w.\-가-힣]+/g, "_").slice(0, 80) || "video";
+    const tag = isClip ? `_${Math.round(startSec)}-${Math.round(endSec)}` : "";
+    const outPath = `${dir.replace(/\/+$/, "")}/${base}${tag}.mp4`;
+    showFlash(isClip ? "\uAD6C\uAC04 \uB2E4\uC6B4\uB85C\uB4DC \uC2DC\uC791\u2026" : "\uB2E4\uC6B4\uB85C\uB4DC \uC2DC\uC791\u2026");
+    try {
+      const raw = await app.commands.execute("download", { inputUrl: currentInput, outPath, startSec, endSec });
+      const res = raw && typeof raw === "object" && "result" in raw ? raw.result : raw;
+      if (res?.ok) showFlash(`\uC800\uC7A5\uB428: ${res.path ?? outPath}`);
+      else showFlash(`\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${res?.message ?? "\uC624\uB958"}`);
+    } catch (e) {
+      showFlash(`\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [app, currentInput, clipStart, media, showFlash]);
   const onMediaKey = (0, import_react.useCallback)(
     (e) => {
       if (e.key === "[") {
@@ -46298,7 +46327,8 @@ function PlayerView({ app, store }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pb-row-title", children: media.title ?? "Player" }),
         canClip && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "clip-start", onClick: markStart, children: "[ \uC2DC\uC791" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "clip-end", onClick: () => void markEnd(), children: "] \uD074\uB9BD" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "clip-end", onClick: () => void markEnd(), children: "] \uD074\uB9BD" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "download", onClick: () => void downloadCurrent(), children: "\u2193 \uC800\uC7A5" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "close", onClick: () => setMedia(null), children: "\u2715" })
       ] }),
@@ -46745,6 +46775,38 @@ function createStore(app) {
   };
 }
 
+// src/download.ts
+function buildFfmpegArgs(src, outPath, startSec, endSec) {
+  const a = ["-y"];
+  const clip = typeof startSec === "number" && typeof endSec === "number" && Number.isFinite(startSec) && Number.isFinite(endSec) && endSec > startSec;
+  if (clip) a.push("-ss", String(startSec));
+  a.push("-i", src);
+  if (clip) a.push("-t", String(endSec - startSec));
+  a.push("-c", "copy", outPath);
+  return a;
+}
+async function runDownload(app, spawn, opts) {
+  const input = String(opts?.inputUrl ?? "").trim();
+  const outPath = String(opts?.outPath ?? "").trim();
+  if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
+  if (!outPath) return { ok: false, code: "INVALID_PARAMS", message: "outPath \uD544\uC694" };
+  const r = await resolveUrl(input, spawn);
+  if (r.kind === "youtube") {
+    return { ok: false, code: "NO_STREAM", message: "iframe \uC784\uBCA0\uB4DC\uB294 \uB2E4\uC6B4\uB85C\uB4DC \uBD88\uAC00(\uC2A4\uD2B8\uB9BC URL \uC5C6\uC74C)" };
+  }
+  const hasMedia = Boolean(r.mediaUrl) || Boolean(r.filePath);
+  if (r.kind === "unsupported" || !hasMedia) {
+    return { ok: false, code: "NO_STREAM", message: r.reason ?? "\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC2A4\uD2B8\uB9BC\uC744 \uCC3E\uC9C0 \uBABB\uD568" };
+  }
+  const src = r.filePath ? r.filePath : await proxiedUrl(app, r);
+  const args = buildFfmpegArgs(src, outPath, opts.startSec, opts.endSec);
+  const res = await spawn("ffmpeg", args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
+  if (res.code !== 0) {
+    return { ok: false, code: "FFMPEG_FAILED", message: (res.stderr || "").slice(-400) || "ffmpeg \uC2E4\uD328" };
+  }
+  return { ok: true, path: outPath };
+}
+
 // src/commands.ts
 function probe2(spawn, cmd, args) {
   return spawn(cmd, args).then((r) => r.code === 0 ? { found: true, version: (r.stdout.split("\n")[0] || "").trim() } : { found: false }).catch(() => ({ found: false }));
@@ -46877,6 +46939,23 @@ function registerCommands(ctx, store, app) {
       return { items, count: items.length };
     }
   });
+  reg("download", {
+    description: "\uBBF8\uB514\uC5B4\uB97C \uB85C\uCEEC mp4 \uB85C \uC800\uC7A5 \u2014 \uCF54\uC5B4 \uD504\uB85D\uC2DC \uACBD\uC720 HLS/\uC9C1\uC811/\uB85C\uCEEC\uC744 ffmpeg \uB85C \uBB36\uC74C. \uC804\uCCB4 \uB610\uB294 [startSec,endSec] \uAD6C\uAC04. yt-dlp \uBE44\uAC1C\uC785(\uD574\uC11D\uB9CC). iframe(YouTube \uD574\uC11D \uC2E4\uD328)\uC740 \uC800\uC7A5 \uBD88\uAC00. ffmpeg \uD544\uC694.",
+    params: {
+      inputUrl: { type: "string", description: "\uBE44\uB514\uC624 URL/\uACBD\uB85C", required: true },
+      outPath: { type: "string", description: "\uC800\uC7A5 \uC808\uB300\uACBD\uB85C(.mp4)", required: true },
+      startSec: { type: "number", description: "\uAD6C\uAC04 \uC2DC\uC791 \uCD08(\uC0DD\uB7B5=\uC804\uCCB4)" },
+      endSec: { type: "number", description: "\uAD6C\uAC04 \uC885\uB8CC \uCD08" }
+    },
+    returns: "{ ok, path }",
+    danger: "inject",
+    handler: async (p) => runDownload(app, spawn, {
+      inputUrl: String(p?.inputUrl ?? ""),
+      outPath: String(p?.outPath ?? ""),
+      startSec: typeof p?.startSec === "number" ? p.startSec : void 0,
+      endSec: typeof p?.endSec === "number" ? p.endSec : void 0
+    })
+  });
   reg("doctor", {
     description: "\uC678\uBD80 \uC758\uC874\uC131(yt-dlp, ffmpeg) \uD0D0\uC9C0\xB7\uBC84\uC804 \uBCF4\uACE0. ready = yt-dlp \uC0AC\uC6A9 \uAC00\uB2A5 \uC5EC\uBD80. read-only.",
     params: {},
@@ -46886,7 +46965,7 @@ function registerCommands(ctx, store, app) {
         probe2(spawn, "yt-dlp", ["--version"]),
         probe2(spawn, "ffmpeg", ["-version"])
       ]);
-      return { ytdlp, ffmpeg, ready: ytdlp.found, note: ffmpeg.found ? void 0 : "ffmpeg \uB294 \uB2E4\uC6B4\uB85C\uB4DC/\uD074\uB9BD\uCEF7\uC5D0\uB9CC \uD544\uC694" };
+      return { ytdlp, ffmpeg, ready: ytdlp.found, note: ffmpeg.found ? void 0 : "ffmpeg \uB294 download(\uC804\uCCB4/\uAD6C\uAC04 \uC800\uC7A5)\uC5D0\uB9CC \uD544\uC694 \u2014 \uC7AC\uC0DD\uC5D4 \uBD88\uC694" };
     }
   });
   reg("setup", {

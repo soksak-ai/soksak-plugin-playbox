@@ -6,6 +6,8 @@
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const PLUGIN_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
 const PLUGIN_ID = "soksak-playbox";
@@ -60,7 +62,8 @@ function rpc(method, params = {}, timeoutMs = 30000) {
       clearTimeout(timer);
       resolve(msg);
     });
-    sock.write(JSON.stringify({ id, method, params }) + "\n");
+    // 봉투 timeoutMs 도 전달 — 서버 rx.recv_timeout 가 이 값을 쓴다(긴 작업=download 가 10s 기본에 안 잘리게).
+    sock.write(JSON.stringify({ id, method, params, timeoutMs: Math.max(5000, timeoutMs - 2000) }) + "\n");
   });
 }
 
@@ -174,6 +177,29 @@ async function main() {
   // ── E. play (inject — 라이브러리 비기록, 인텐트+해석만) ──────────────────────
   const played = val(await rpc(P + "play", { inputUrl: `https://example.com/${MARKER}/c.mp4` }));
   ok(played.requested === true && played.resolved && played.resolved.kind === "direct", "play 인텐트+해석", played);
+
+  // ── F. download (프록시+ffmpeg, 라이브 — 중립 공개 HLS, 사이트명 0) ───────────
+  // resolve → 코어 프록시 → ffmpeg 로 실제 mp4 저장(구간 6초). yt-dlp 비개입. 파일 + ffprobe 로 증명.
+  const dlOut = path.join(os.tmpdir(), "pb-e2e-download.mp4");
+  try { fs.unlinkSync(dlOut); } catch {}
+  const APPLE = "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8";
+  const dl = val(await rpc(P + "download", { inputUrl: APPLE, outPath: dlOut, startSec: 0, endSec: 6 }, 90000));
+  ok(dl.ok === true && dl.path === dlOut, "download 구간 저장 성공", dl);
+  let dlBytes = 0;
+  let dlDur = 0;
+  try {
+    dlBytes = fs.statSync(dlOut).size;
+    const probe = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", dlOut], { encoding: "utf8" });
+    dlDur = parseFloat(probe.trim());
+  } catch (e) {
+    console.log("  · ffprobe/stat 실패:", e.message);
+  }
+  ok(dlBytes > 10000, "download 파일 바이트>10KB(실재 비디오)", dlBytes);
+  ok(dlDur > 3 && dlDur < 9, "download 재생시간 ~6초", dlDur);
+  // iframe(YouTube 해석 실패 가정)·미지원 입력은 저장 거부.
+  const dlBad = val(await rpc(P + "download", { inputUrl: "ftp://host/a.mp4", outPath: dlOut }, 20000));
+  ok(dlBad.ok === false && dlBad.code === "NO_STREAM", "download 미지원 입력 → NO_STREAM", dlBad);
+  try { fs.unlinkSync(dlOut); } catch {}
 
   // ── 청소 + 멱등 검증 ────────────────────────────────────────────────────────
   const rmFav = val(await rpc(P + "favorite.remove", { id: favId }));

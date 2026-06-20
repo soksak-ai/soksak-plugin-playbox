@@ -14,25 +14,9 @@ import { resolveViaWebview, resolveViaWebviewHidden } from "@/webview-resolve";
 import type { LibraryStore } from "@/store";
 import type { Resolved } from "@/types";
 import { attachHls } from "./hls";
+import { proxiedUrl } from "@/proxy";
 
 type Media = { mode: "video" | "hls" | "iframe"; src: string; title?: string };
-
-// needsProxy 미디어를 코어 프록시 URL 로(가능할 때). 코어 미반영이면 원본 직접 시도(fallback).
-async function proxied(app: any, r: Resolved): Promise<string> {
-  if (!r.needsProxy || !r.mediaUrl) return r.mediaUrl ?? "";
-  try {
-    const out = await app.commands.execute("media.proxy.info");
-    const base = out?.base ?? out?.result?.base;
-    if (!base) return r.mediaUrl;
-    const kind = r.kind === "hls" ? "m3u8" : "stream";
-    let u = `${base}/${kind}?url=${encodeURIComponent(r.mediaUrl)}`;
-    if (r.referer) u += `&referer=${encodeURIComponent(r.referer)}`;
-    if (r.userAgent) u += `&ua=${encodeURIComponent(r.userAgent)}`;
-    return u;
-  } catch {
-    return r.mediaUrl;
-  }
-}
 
 export default function PlayerView({ app, store }: { app: any; store: LibraryStore | null }) {
   const [media, setMedia] = useState<Media | null>(null);
@@ -74,7 +58,7 @@ export default function PlayerView({ app, store }: { app: any; store: LibrarySto
         setMedia({ mode: "video", src: r.filePath, title: r.title });
         return;
       }
-      const src = await proxied(app, r);
+      const src = await proxiedUrl(app, r);
       setMedia({ mode: r.kind === "hls" ? "hls" : "video", src, title: r.title });
     },
     [app],
@@ -158,6 +142,38 @@ export default function PlayerView({ app, store }: { app: any; store: LibrarySto
     setClipStart(null);
   }, [app, clipStart, currentInput, showFlash]);
 
+  // 다운로드 — 현재 미디어를 download 커맨드로(프록시+ffmpeg). clipStart 가 표시돼 있으면 그 구간만,
+  // 아니면 전체. iframe(YouTube 해석 실패)은 버튼이 없으니 여기 닿지 않는다. 저장 폴더는 설정(downloadDir).
+  const downloadCurrent = useCallback(async () => {
+    if (!currentInput) {
+      showFlash("재생 중인 입력이 없습니다");
+      return;
+    }
+    const dir = String(app?.settings?.get?.("downloadDir") ?? "").trim();
+    if (!dir) {
+      showFlash("설정에서 다운로드 폴더를 먼저 지정하세요");
+      return;
+    }
+    const t = videoRef.current?.currentTime ?? null;
+    const isClip = clipStart != null && t != null && Math.abs(t - clipStart) >= 0.1;
+    const startSec = isClip ? Math.min(clipStart as number, t as number) : undefined;
+    const endSec = isClip ? Math.max(clipStart as number, t as number) : undefined;
+    const base = (media?.title || "video").replace(/[^\w.\-가-힣]+/g, "_").slice(0, 80) || "video";
+    const tag = isClip ? `_${Math.round(startSec as number)}-${Math.round(endSec as number)}` : "";
+    const outPath = `${dir.replace(/\/+$/, "")}/${base}${tag}.mp4`;
+    showFlash(isClip ? "구간 다운로드 시작…" : "다운로드 시작…");
+    try {
+      const raw = await app.commands.execute("download", { inputUrl: currentInput, outPath, startSec, endSec });
+      const res = (raw && typeof raw === "object" && "result" in raw ? (raw as any).result : raw) as
+        | { ok?: boolean; path?: string; message?: string }
+        | undefined;
+      if (res?.ok) showFlash(`저장됨: ${res.path ?? outPath}`);
+      else showFlash(`다운로드 실패: ${res?.message ?? "오류"}`);
+    } catch (e) {
+      showFlash(`다운로드 실패: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [app, currentInput, clipStart, media, showFlash]);
+
   const onMediaKey = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "[") {
@@ -208,6 +224,9 @@ export default function PlayerView({ app, store }: { app: any; store: LibrarySto
               </button>
               <button className="pb-btn pb-btn-ghost" data-node="clip-end" onClick={() => void markEnd()}>
                 ] 클립
+              </button>
+              <button className="pb-btn pb-btn-ghost" data-node="download" onClick={() => void downloadCurrent()}>
+                ↓ 저장
               </button>
             </>
           )}
