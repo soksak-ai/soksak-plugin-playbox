@@ -29,8 +29,8 @@ const opts = {
 if (process.argv.includes("--watch")) {
   const ctx = await context(opts);
   await ctx.watch();
-  console.log("[playbox] watching src → main.js …");
+  console.log("[media-player] watching src → main.js …");
 } else {
   await build(opts);
-  console.log("[playbox] built main.js");
+  console.log("[media-player] built main.js");
 }
