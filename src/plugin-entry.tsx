@@ -1,6 +1,6 @@
-// soksak-playbox 엔트리 — loader 가 blob-URL 로 import 하는 단일 ESM(react/hls.js 인라인).
+// soksak-plugin-media-player 엔트리 — loader 가 blob-URL 로 import 하는 단일 ESM(react/hls.js 인라인).
 // 뷰는 Shadow DOM 에 마운트(soksak chrome 격리). 헤드리스 커맨드는 뷰 미오픈에도 동작 —
-// sok plugin.soksak-playbox.* / MCP / 소켓 E2E. 단일 진실 스토어 = app.data "library".
+// sok plugin.soksak-plugin-media-player.* / MCP / 소켓 E2E. 단일 진실 스토어 = app.data "library".
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import App from "@/view/App";
@@ -99,7 +99,7 @@ export default {
       ctx.subscriptions.push(
         app.commands.register("ping", {
           description: "플러그인 적재/버전 확인(E2E)",
-          handler: async () => ({ ok: true, plugin: "soksak-playbox", version: "0.0.1", phase: "M1" }),
+          handler: async () => ({ ok: true, plugin: "soksak-plugin-media-player", version: "0.0.1", phase: "M1" }),
         }),
       );
       registerCommands(ctx, store, app);
