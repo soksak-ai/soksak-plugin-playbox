@@ -12,9 +12,10 @@ clean in-app player.
   streams); a webview cannot intercept a usable URL, so `yt-dlp` handles it.
 - **Local files** — drag-drop or open a file.
 - **Direct media URLs** — `.mp4`, `.m3u8`, etc.
-- **Arbitrary web pages** — for pages that serve a self-contained playlist, the
-  page is loaded in a WebKit webview and the media URL it requests is intercepted
-  (no site-specific code). `yt-dlp` is also tried for pages it supports.
+- **Arbitrary web pages** — the page is loaded in a WebKit webview (which passes
+  Cloudflare/SNI blocks that `yt-dlp` cannot), and the stream is taken either from
+  the media the page requests or from an embedded iframe player's URL — no
+  site-specific code. `yt-dlp` is tried first for pages it supports.
 
 Referer/CORS-protected HLS is streamed through soksak's core media proxy, which
 injects the required headers and serves binary segments the webview cannot fetch

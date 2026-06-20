@@ -12757,6 +12757,31 @@ var import_client = __toESM(require_client(), 1);
 // src/view/PlayerView.tsx
 var import_react = __toESM(require_react(), 1);
 
+// src/spawn.ts
+function makeSpawn(app) {
+  return (cmd, args) => new Promise((resolve, reject) => {
+    const proc = app?.process;
+    if (!proc?.spawn) {
+      reject(new Error("process capability \uBBF8\uAC00\uC6A9(\uAD8C\uD55C/\uCF54\uC5B4)"));
+      return;
+    }
+    const dec = new TextDecoder();
+    let stdout = "";
+    let stderr = "";
+    proc.spawn(cmd, args).then((handle) => {
+      proc.onData?.(handle, (d) => {
+        stdout += dec.decode(d, { stream: true });
+      });
+      proc.onStderr?.(handle, (d) => {
+        stderr += dec.decode(d, { stream: true });
+      });
+      proc.onExit?.(handle, (code) => {
+        resolve({ code: code ?? 0, stdout, stderr });
+      });
+    }).catch(reject);
+  });
+}
+
 // src/resolve/local.ts
 function isLocal(input) {
   return input.startsWith("file://") || input.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(input);
@@ -12827,6 +12852,56 @@ function resolveYouTube(input) {
     title: `YouTube ${id}`,
     source: "youtube"
   };
+}
+
+// src/util.ts
+function classify(input) {
+  const s = input.trim();
+  if (isLocal(s)) return { source: "local", title: s.split(/[\\/]/).pop() || s };
+  if (isDirectMedia(s)) return { source: "direct", title: s.split(/[?#]/)[0].split("/").pop() || s };
+  if (isYouTube(s)) return { source: "youtube", title: "YouTube " + (youTubeId(s) ?? "") };
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      return { source: "page", title: new URL(s).hostname };
+    } catch {
+      return { source: "page", title: s };
+    }
+  }
+  return { source: "none", title: s };
+}
+function parseDomainMap(entries) {
+  const out = [];
+  if (!Array.isArray(entries)) return out;
+  for (const e of entries) {
+    if (!e || typeof e !== "object") continue;
+    const from = String(e.key ?? "").trim();
+    const to = String(e.value ?? "").trim();
+    if (from && to) out.push({ from, to });
+  }
+  return out;
+}
+function applyDomainMap(url, pairs) {
+  try {
+    const u = new URL(url);
+    for (const { from, to } of pairs) {
+      if (!from || !to) continue;
+      if (u.hostname === from || u.hostname.endsWith("." + from)) {
+        u.hostname = u.hostname.slice(0, u.hostname.length - from.length) + to;
+        return u.toString();
+      }
+    }
+  } catch {
+  }
+  return url;
+}
+function fmtTime(sec) {
+  let v = Number.isFinite(sec) && sec > 0 ? sec : 0;
+  const s = Math.floor(v % 60);
+  const m = Math.floor(v / 60 % 60);
+  const h = Math.floor(v / 3600);
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
 // src/resolve/ytdlp.ts
@@ -12932,81 +13007,6 @@ async function resolveUrl(input, spawn, ytdlpPath) {
   return { kind: "unsupported", reason: "\uC9C0\uC6D0\uD558\uC9C0 \uC54A\uB294 \uC785\uB825 \uD615\uC2DD", source: "none" };
 }
 
-// src/spawn.ts
-function makeSpawn(app) {
-  return (cmd, args) => new Promise((resolve, reject) => {
-    const proc = app?.process;
-    if (!proc?.spawn) {
-      reject(new Error("process capability \uBBF8\uAC00\uC6A9(\uAD8C\uD55C/\uCF54\uC5B4)"));
-      return;
-    }
-    const dec = new TextDecoder();
-    let stdout = "";
-    let stderr = "";
-    proc.spawn(cmd, args).then((handle) => {
-      proc.onData?.(handle, (d) => {
-        stdout += dec.decode(d, { stream: true });
-      });
-      proc.onStderr?.(handle, (d) => {
-        stderr += dec.decode(d, { stream: true });
-      });
-      proc.onExit?.(handle, (code) => {
-        resolve({ code: code ?? 0, stdout, stderr });
-      });
-    }).catch(reject);
-  });
-}
-
-// src/util.ts
-function classify(input) {
-  const s = input.trim();
-  if (isLocal(s)) return { source: "local", title: s.split(/[\\/]/).pop() || s };
-  if (isDirectMedia(s)) return { source: "direct", title: s.split(/[?#]/)[0].split("/").pop() || s };
-  if (isYouTube(s)) return { source: "youtube", title: "YouTube " + (youTubeId(s) ?? "") };
-  if (/^https?:\/\//i.test(s)) {
-    try {
-      return { source: "page", title: new URL(s).hostname };
-    } catch {
-      return { source: "page", title: s };
-    }
-  }
-  return { source: "none", title: s };
-}
-function parseDomainMap(entries) {
-  const out = [];
-  if (!Array.isArray(entries)) return out;
-  for (const e of entries) {
-    if (!e || typeof e !== "object") continue;
-    const from = String(e.key ?? "").trim();
-    const to = String(e.value ?? "").trim();
-    if (from && to) out.push({ from, to });
-  }
-  return out;
-}
-function applyDomainMap(url, pairs) {
-  try {
-    const u = new URL(url);
-    for (const { from, to } of pairs) {
-      if (!from || !to) continue;
-      if (u.hostname === from || u.hostname.endsWith("." + from)) {
-        u.hostname = u.hostname.slice(0, u.hostname.length - from.length) + to;
-        return u.toString();
-      }
-    }
-  } catch {
-  }
-  return url;
-}
-function fmtTime(sec) {
-  let v = Number.isFinite(sec) && sec > 0 ? sec : 0;
-  const s = Math.floor(v % 60);
-  const m = Math.floor(v / 60 % 60);
-  const h = Math.floor(v / 3600);
-  const mm = String(m).padStart(2, "0");
-  const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
-}
-
 // src/webview-resolve.ts
 function unwrap(out) {
   if (out && typeof out === "object" && "result" in out && out.result !== void 0) return out.result;
@@ -13024,6 +13024,32 @@ function originOf(url) {
   } catch {
     return "";
   }
+}
+var MEDIA_RE = /\.(m3u8|mp4|m4v|webm|ogg|ogv|mov|mkv|ts|mpd)(\?|#|$)/i;
+function mediaFromEmbedSrc(src) {
+  if (typeof src !== "string" || !src) return null;
+  if (/^https?:\/\//i.test(src) && MEDIA_RE.test(src.split(/[?#]/)[0])) return src;
+  try {
+    const u = new URL(src);
+    for (const [, v] of u.searchParams) {
+      if (/^https?:\/\//i.test(v) && MEDIA_RE.test(v)) return v;
+      try {
+        const dv = decodeURIComponent(v);
+        if (/^https?:\/\//i.test(dv) && MEDIA_RE.test(dv)) return dv;
+      } catch {
+      }
+    }
+  } catch {
+  }
+  return null;
+}
+function pickEmbedMedia(srcs) {
+  if (!Array.isArray(srcs)) return null;
+  for (const s of srcs) {
+    const m = mediaFromEmbedSrc(String(s));
+    if (m) return m;
+  }
+  return null;
 }
 async function resolveViaWebviewHidden(app, url, timeoutMs) {
   try {
@@ -13086,6 +13112,56 @@ async function resolveViaWebview(app, url, timeoutMs) {
       source: "webview"
     };
   }
+}
+async function resolveViaIframe(app, url, timeoutMs) {
+  let viewId = null;
+  try {
+    const opened = unwrap(await app.commands.execute("browser.open", { url, where: "panel" }));
+    viewId = opened?.viewId ?? opened?.view?.id ?? null;
+    if (!viewId) return { kind: "unsupported", reason: "\uBE0C\uB77C\uC6B0\uC800 \uBDF0\uB97C \uC5F4\uC9C0 \uBABB\uD568", source: "webview" };
+    const js = "var out=[];document.querySelectorAll('iframe').forEach(function(f){if(f.src)out.push(f.src)});document.querySelectorAll('video,source').forEach(function(v){var s=v.currentSrc||v.src;if(s)out.push(s)});return JSON.stringify(out)";
+    const deadline = Date.now() + Math.max(3e3, timeoutMs);
+    let media = null;
+    while (Date.now() < deadline) {
+      const res = unwrap(await app.commands.execute("browser.eval", { view: viewId, js }).catch(() => null));
+      let srcs = [];
+      try {
+        srcs = JSON.parse(typeof res === "string" ? res : res && res.result || "[]");
+      } catch {
+        srcs = [];
+      }
+      media = pickEmbedMedia(srcs);
+      if (media) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    if (viewId) await app.commands.execute("view.close", { view: viewId }).catch(() => {
+    });
+    viewId = null;
+    if (!media) {
+      return { kind: "unsupported", reason: "iframe/\uC784\uBCA0\uB4DC\uC5D0\uC11C \uBBF8\uB514\uC5B4 URL \uC744 \uCC3E\uC9C0 \uBABB\uD568", source: "webview" };
+    }
+    const isHls = /\.m3u8(\?|#|$)/i.test(media);
+    return { kind: isHls ? "hls" : "direct", mediaUrl: media, needsProxy: true, referer: originOf(url), source: "webview" };
+  } catch (e) {
+    if (viewId) await app.commands.execute("view.close", { view: viewId }).catch(() => {
+    });
+    return { kind: "unsupported", reason: `iframe \uCD94\uCD9C \uC2E4\uD328: ${e instanceof Error ? e.message : String(e)}`, source: "webview" };
+  }
+}
+
+// src/resolveFull.ts
+async function resolveFull(app, raw, spawn) {
+  const input = applyDomainMap(raw, parseDomainMap(app?.settings?.get?.("domainMap")));
+  let resolved = await resolveUrl(input, spawn);
+  if (resolved.kind === "unsupported" && /^https?:\/\//i.test(input)) {
+    const tmo = Number(app?.settings?.get?.("sniffTimeoutMs") ?? 15e3);
+    const mode = String(app?.settings?.get?.("extractMode") ?? "hidden");
+    resolved = mode === "tab" ? await resolveViaWebview(app, input, tmo) : await resolveViaWebviewHidden(app, input, tmo);
+    if (resolved.kind === "unsupported") {
+      resolved = await resolveViaIframe(app, input, tmo);
+    }
+  }
+  return { resolved, input };
 }
 
 // node_modules/hls.js/dist/hls.mjs
@@ -46199,13 +46275,7 @@ function PlayerView({ app, store }) {
       if (!raw) return;
       setBusy(true);
       try {
-        const input = applyDomainMap(raw, parseDomainMap(app?.settings?.get?.("domainMap")));
-        let r = await resolveUrl(input, makeSpawn(app));
-        if (r.kind === "unsupported" && /^https?:\/\//i.test(input)) {
-          const tmo = Number(app?.settings?.get?.("sniffTimeoutMs") ?? 15e3);
-          const mode = String(app?.settings?.get?.("extractMode") ?? "hidden");
-          r = mode === "tab" ? await resolveViaWebview(app, input, tmo) : await resolveViaWebviewHidden(app, input, tmo);
-        }
+        const { resolved: r, input } = await resolveFull(app, raw, makeSpawn(app));
         await playResolved(r, input);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -46790,7 +46860,7 @@ async function runDownload(app, spawn, opts) {
   const outPath = String(opts?.outPath ?? "").trim();
   if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
   if (!outPath) return { ok: false, code: "INVALID_PARAMS", message: "outPath \uD544\uC694" };
-  const r = await resolveUrl(input, spawn);
+  const { resolved: r } = await resolveFull(app, input, spawn);
   if (r.kind === "youtube") {
     return { ok: false, code: "NO_STREAM", message: "iframe \uC784\uBCA0\uB4DC\uB294 \uB2E4\uC6B4\uB85C\uB4DC \uBD88\uAC00(\uC2A4\uD2B8\uB9BC URL \uC5C6\uC74C)" };
   }

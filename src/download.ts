@@ -1,7 +1,8 @@
 // 다운로드 — 해석(resolveUrl) → 코어 프록시 URL(또는 로컬/직접) → ffmpeg 로 mp4 묶음(전체/구간).
 // yt-dlp 는 개입 안 함(YouTube 해석에만). 어떤 사이트든 프록시를 통과한 HLS 면 같은 경로로 저장된다(R3).
 // 차단 사이트는 webview-sniff 가 준 m3u8 이 needsProxy → 프록시 → 여기로 들어와 저장됨.
-import { resolveUrl, type SpawnFn } from "@/resolve";
+import { type SpawnFn } from "@/resolve";
+import { resolveFull } from "@/resolveFull";
 import { proxiedUrl } from "@/proxy";
 
 export interface DownloadOpts {
@@ -41,7 +42,8 @@ export async function runDownload(app: any, spawn: SpawnFn, opts: DownloadOpts):
   if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
   if (!outPath) return { ok: false, code: "INVALID_PARAMS", message: "outPath 필요" };
 
-  const r = await resolveUrl(input, spawn);
+  // 재생과 동일 해석(yt-dlp → webview 폴백) — Cloudflare/SNI 사이트도 webview 스니프로 닿는다.
+  const { resolved: r } = await resolveFull(app, input, spawn);
   // iframe 임베드(YouTube yt-dlp 해석 실패 폴백)는 다운로드할 스트림이 없음 — 정직하게 거부(R9).
   if (r.kind === "youtube") {
     return { ok: false, code: "NO_STREAM", message: "iframe 임베드는 다운로드 불가(스트림 URL 없음)" };

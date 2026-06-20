@@ -7,10 +7,9 @@ import {
   type DragEvent,
   type KeyboardEvent,
 } from "react";
-import { resolveUrl } from "@/resolve";
 import { makeSpawn } from "@/spawn";
-import { fmtTime, applyDomainMap, parseDomainMap } from "@/util";
-import { resolveViaWebview, resolveViaWebviewHidden } from "@/webview-resolve";
+import { fmtTime } from "@/util";
+import { resolveFull } from "@/resolveFull";
 import type { LibraryStore } from "@/store";
 import type { Resolved } from "@/types";
 import { attachHls } from "./hls";
@@ -70,19 +69,8 @@ export default function PlayerView({ app, store }: { app: any; store: LibrarySto
       if (!raw) return;
       setBusy(true);
       try {
-        // 도메인 매핑 적용(설정 list, 사용자 입력만·소스에 사이트명 0) — 차단 호스트를 미러로.
-        const input = applyDomainMap(raw, parseDomainMap(app?.settings?.get?.("domainMap")));
-        // 경로 1: yt-dlp/직접/youtube/로컬.
-        let r = await resolveUrl(input, makeSpawn(app));
-        // 경로 2(R10): yt-dlp 가 못 뚫는 http(s) 페이지 → WebKit 브라우저 로드 + 코어 미디어 스니프.
-        // 추출 방식은 설정(extractMode): hidden=오프스크린(기본·깔끔), tab=보이는 탭(사용자 개입 가능).
-        if (r.kind === "unsupported" && /^https?:\/\//i.test(input)) {
-          const tmo = Number(app?.settings?.get?.("sniffTimeoutMs") ?? 15000);
-          const mode = String(app?.settings?.get?.("extractMode") ?? "hidden");
-          r = mode === "tab"
-            ? await resolveViaWebview(app, input, tmo)
-            : await resolveViaWebviewHidden(app, input, tmo);
-        }
+        // 재생·다운로드 공통 해석(도메인매핑 → yt-dlp → webview 폴백). 단일진실 resolveFull.
+        const { resolved: r, input } = await resolveFull(app, raw, makeSpawn(app));
         await playResolved(r, input);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
