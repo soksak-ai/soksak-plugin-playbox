@@ -1,6 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { buildFfmpegArgs, runDownload } from "./download";
+import { proxiedUrl } from "./proxy";
 import type { SpawnFn, SpawnResult } from "./resolve";
+
+// ── proxiedUrl: ua 생략(ffmpeg URL 파서 깨짐 방지) ───────────────────────────
+describe("proxiedUrl omitUa", () => {
+  const app = { commands: { execute: () => Promise.resolve({ base: "http://127.0.0.1:9/tok" }) } };
+  const r = { kind: "hls", mediaUrl: "https://x/p.m3u8", needsProxy: true, userAgent: "Mozilla/5.0 (X) Chrome/1", source: "youtube" } as never;
+  it("기본은 ua 포함(재생용)", async () => {
+    expect(await proxiedUrl(app, r)).toContain("&ua=");
+  });
+  it("omitUa → ua 생략(ffmpeg 안전)", async () => {
+    const u = await proxiedUrl(app, r, { omitUa: true });
+    expect(u).not.toContain("&ua=");
+    expect(u).toContain("/m3u8?url=");
+  });
+});
 
 // ── buildFfmpegArgs: 순수(전체/구간/무효구간) ────────────────────────────────
 describe("buildFfmpegArgs", () => {

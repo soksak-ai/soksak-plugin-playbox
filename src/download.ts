@@ -52,7 +52,8 @@ export async function runDownload(app: any, spawn: SpawnFn, opts: DownloadOpts):
   }
 
   // 로컬 파일은 그대로, 그 외는 프록시 경유(needsProxy) 또는 원본 직접(needsProxy=false).
-  const src = r.filePath ? r.filePath : await proxiedUrl(app, r);
+  // omitUa: ffmpeg URL 파서가 ua(공백/괄호)에서 깨지므로 다운로드는 ua 생략(프록시 DEFAULT_UA 사용).
+  const src = r.filePath ? r.filePath : await proxiedUrl(app, r, { omitUa: true });
   const args = buildFfmpegArgs(src, outPath, opts.startSec, opts.endSec);
   const res = await spawn("ffmpeg", args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
   if (res.code !== 0) {

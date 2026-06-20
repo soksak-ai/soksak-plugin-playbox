@@ -46133,7 +46133,7 @@ function attachHls(video, src) {
 }
 
 // src/proxy.ts
-async function proxiedUrl(app, r) {
+async function proxiedUrl(app, r, opts) {
   if (!r.needsProxy || !r.mediaUrl) return r.mediaUrl ?? "";
   try {
     const out = await app.commands.execute("media.proxy.info");
@@ -46142,7 +46142,7 @@ async function proxiedUrl(app, r) {
     const kind = r.kind === "hls" ? "m3u8" : "stream";
     let u = `${base}/${kind}?url=${encodeURIComponent(r.mediaUrl)}`;
     if (r.referer) u += `&referer=${encodeURIComponent(r.referer)}`;
-    if (r.userAgent) u += `&ua=${encodeURIComponent(r.userAgent)}`;
+    if (r.userAgent && !opts?.omitUa) u += `&ua=${encodeURIComponent(r.userAgent)}`;
     return u;
   } catch {
     return r.mediaUrl;
@@ -46798,7 +46798,7 @@ async function runDownload(app, spawn, opts) {
   if (r.kind === "unsupported" || !hasMedia) {
     return { ok: false, code: "NO_STREAM", message: r.reason ?? "\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC2A4\uD2B8\uB9BC\uC744 \uCC3E\uC9C0 \uBABB\uD568" };
   }
-  const src = r.filePath ? r.filePath : await proxiedUrl(app, r);
+  const src = r.filePath ? r.filePath : await proxiedUrl(app, r, { omitUa: true });
   const args = buildFfmpegArgs(src, outPath, opts.startSec, opts.endSec);
   const res = await spawn("ffmpeg", args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
   if (res.code !== 0) {
