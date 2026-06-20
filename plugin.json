@@ -1,0 +1,333 @@
+{
+  "spec": "soksak-spec-plugin@0.0.1",
+  "id": "soksak-playbox",
+  "name": {
+    "ko": "플레이박스",
+    "en": "Playbox"
+  },
+  "version": "0.0.1",
+  "repo": "https://github.com/soksak-ai/soksak-playbox.git",
+  "description": {
+    "ko": "비디오 라이브러리·플레이어 — 즐겨찾기·클립. YouTube·로컬 파일·직접 미디어 URL·임의 웹페이지(yt-dlp 경유)를 재생하고, 보호된 HLS 는 코어 미디어 프록시로 스트리밍.",
+    "en": "Video library and player — favorites and clips. Plays YouTube, local files, direct media URLs, and arbitrary web pages (via yt-dlp); protected HLS is streamed through the core media proxy."
+  },
+  "entry": "main.js",
+  "configuration": [
+    {
+      "key": "domainMap",
+      "type": "map",
+      "default": [],
+      "title": {
+        "ko": "도메인 매핑",
+        "en": "Domain mapping"
+      },
+      "description": {
+        "ko": "원본 호스트 → 미러 호스트. 접속 차단 호스트를 접속 가능한 미러 호스트로 치환합니다. + 추가로 여러 개, ✕ 로 삭제.",
+        "en": "Original host → mirror host. Replace a blocked host with a reachable mirror. Use + to add, ✕ to remove."
+      }
+    },
+    {
+      "key": "extractMode",
+      "type": "enum",
+      "default": "hidden",
+      "enum": [
+        "hidden",
+        "tab"
+      ],
+      "enumLabels": [
+        {
+          "ko": "숨김(오프스크린)",
+          "en": "Hidden (offscreen)"
+        },
+        {
+          "ko": "탭(보임)",
+          "en": "Tab (visible)"
+        }
+      ],
+      "title": {
+        "ko": "추출 방식",
+        "en": "Extract mode"
+      },
+      "description": {
+        "ko": "웹페이지에서 스트림을 추출하는 방식. 숨김=보이지 않게 오프스크린에서. 탭=브라우저 탭을 띄워 직접 재생을 누를 수 있음(페이지가 클릭을 요구할 때).",
+        "en": "How to extract a stream from a web page. Hidden = offscreen, invisible. Tab = open a visible browser tab so you can click play (for pages that require interaction)."
+      }
+    },
+    {
+      "key": "sniffTimeoutMs",
+      "type": "number",
+      "default": 15000,
+      "min": 3000,
+      "max": 60000,
+      "title": {
+        "ko": "추출 대기(ms)",
+        "en": "Extract wait (ms)"
+      },
+      "description": {
+        "ko": "웹페이지에서 미디어 스트림을 추출할 때 최대 대기 시간.",
+        "en": "Maximum wait when extracting a media stream from a web page."
+      }
+    }
+  ],
+  "permissions": [
+    "ui",
+    "commands",
+    "commands:inject",
+    "data",
+    "process",
+    "programs"
+  ],
+  "contributes": {
+    "views": [
+      {
+        "id": "library",
+        "title": {
+          "ko": "라이브러리",
+          "en": "Library"
+        },
+        "icon": "▶",
+        "placements": [
+          "sidebar-right"
+        ],
+        "defaultPlacement": "sidebar-right"
+      },
+      {
+        "id": "player",
+        "title": {
+          "ko": "플레이어",
+          "en": "Player"
+        },
+        "icon": "▷",
+        "placements": [
+          "content"
+        ],
+        "defaultPlacement": "content"
+      }
+    ],
+    "commands": [
+      {
+        "name": "ping",
+        "title": {
+          "ko": "적재/버전 확인",
+          "en": "Ping"
+        }
+      },
+      {
+        "name": "favorite.add",
+        "title": {
+          "ko": "즐겨찾기 추가",
+          "en": "Add favorite"
+        }
+      },
+      {
+        "name": "favorite.remove",
+        "title": {
+          "ko": "항목 삭제",
+          "en": "Remove item"
+        },
+        "danger": "destructive"
+      },
+      {
+        "name": "library.list",
+        "title": {
+          "ko": "라이브러리 목록",
+          "en": "List library"
+        }
+      },
+      {
+        "name": "library.filter",
+        "title": {
+          "ko": "라이브러리 필터",
+          "en": "Filter library"
+        }
+      },
+      {
+        "name": "resolve",
+        "title": {
+          "ko": "URL 해석",
+          "en": "Resolve URL"
+        }
+      },
+      {
+        "name": "play",
+        "title": {
+          "ko": "재생",
+          "en": "Play"
+        },
+        "danger": "inject"
+      },
+      {
+        "name": "clip.add",
+        "title": {
+          "ko": "클립 추가",
+          "en": "Add clip"
+        }
+      },
+      {
+        "name": "clip.list",
+        "title": {
+          "ko": "클립 목록",
+          "en": "List clips"
+        }
+      },
+      {
+        "name": "doctor",
+        "title": {
+          "ko": "의존성 점검",
+          "en": "Doctor"
+        }
+      },
+      {
+        "name": "setup",
+        "title": {
+          "ko": "의존성 설치",
+          "en": "Setup deps"
+        },
+        "danger": "inject"
+      }
+    ],
+    "programs": [
+      {
+        "id": "playbox",
+        "title": {
+          "ko": "플레이박스",
+          "en": "Playbox"
+        },
+        "path": {
+          "ko": "유틸리티",
+          "en": "Utility"
+        },
+        "kind": "view",
+        "view": "player"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "url-input",
+        "description": {
+          "en": "Video URL input",
+          "ko": "비디오 URL 입력"
+        }
+      },
+      {
+        "id": "play",
+        "description": {
+          "en": "Play the entered URL",
+          "ko": "입력 URL 재생"
+        }
+      },
+      {
+        "id": "open-file",
+        "description": {
+          "en": "Open file picker",
+          "ko": "파일 선택 열기"
+        }
+      },
+      {
+        "id": "dropzone",
+        "description": {
+          "en": "Drag-drop target for video files",
+          "ko": "동영상 파일 드롭 영역"
+        }
+      },
+      {
+        "id": "video",
+        "description": {
+          "en": "The video element",
+          "ko": "비디오 요소"
+        }
+      },
+      {
+        "id": "frame",
+        "description": {
+          "en": "The embedded player iframe",
+          "ko": "임베드 플레이어"
+        }
+      },
+      {
+        "id": "clip-start",
+        "description": {
+          "en": "Mark clip start",
+          "ko": "클립 시작 표시"
+        }
+      },
+      {
+        "id": "clip-end",
+        "description": {
+          "en": "Mark clip end and save",
+          "ko": "클립 끝 표시·저장"
+        }
+      },
+      {
+        "id": "close",
+        "description": {
+          "en": "Close current media",
+          "ko": "현재 미디어 닫기"
+        }
+      },
+      {
+        "id": "flash",
+        "description": {
+          "en": "Transient status message",
+          "ko": "일시 상태 메시지"
+        }
+      },
+      {
+        "id": "error",
+        "description": {
+          "en": "Resolve/playback error message",
+          "ko": "해석/재생 오류 메시지"
+        }
+      },
+      {
+        "id": "lib-input",
+        "description": {
+          "en": "Library add-URL input",
+          "ko": "라이브러리 URL 추가 입력"
+        }
+      },
+      {
+        "id": "lib-add",
+        "description": {
+          "en": "Add favorite button",
+          "ko": "즐겨찾기 추가 버튼"
+        }
+      },
+      {
+        "id": "lib-filter",
+        "description": {
+          "en": "Library filter input",
+          "ko": "라이브러리 필터 입력"
+        }
+      },
+      {
+        "id": "lib-kind",
+        "description": {
+          "en": "Library kind filter (all/favorite/clip)",
+          "ko": "라이브러리 종류 필터"
+        }
+      },
+      {
+        "id": "list",
+        "description": {
+          "en": "Library list container",
+          "ko": "라이브러리 목록"
+        }
+      },
+      {
+        "id": "item",
+        "description": {
+          "en": "Library row (item/<id>)",
+          "ko": "라이브러리 행"
+        }
+      },
+      {
+        "id": "remove",
+        "description": {
+          "en": "Remove row button (remove/<id>)",
+          "ko": "행 삭제 버튼"
+        }
+      }
+    ]
+  }
+}
