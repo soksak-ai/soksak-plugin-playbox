@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "verify": "tsc --noEmit && vitest run && node build.mjs"
+    "verify": "tsc --noEmit && vitest run && node build.mjs",
+    "doctor": "soksak-plugin-doctor",
+    "prepublishOnly": "npm run doctor"
   },
   "dependencies": {
     "hls.js": "^1.5.18",
@@ -23,6 +25,7 @@
     "@types/react-dom": "^19.2.3",
     "esbuild": "^0.24.2",
     "typescript": "~5.9.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "soksak-plugin-doctor": "github:soksak-ai/soksak-plugin-doctor"
   }
 }
