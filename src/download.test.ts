@@ -57,6 +57,22 @@ describe("buildFfmpegArgs", () => {
   it("무효 구간(end<=start) → 전체로 폴백", () => {
     expect(buildFfmpegArgs("SRC", "/o.mp4", 18, 10)).toEqual(["-y", "-i", "SRC", "-c", "copy", "/o.mp4"]);
   });
+  it("HLS(m3u8) src → extension_picky 0 + allowed_extensions ALL + protocol_whitelist (자동 스트림 선택)", () => {
+    // 프록시 경유 HLS 는 .jpeg 위장 세그먼트 + 확장자 없는 프록시 URL → ffmpeg 7.x extension_picky 거부.
+    // 명시 -map 은 자막까지 매핑해 mp4 -c copy 를 깨므로 안 쓴다(ffmpeg 자동 선택이 video+audio 만 고른다).
+    const a = buildFfmpegArgs("http://127.0.0.1:9/tok/m3u8?url=x", "/o.mp4", 0, 5);
+    expect(a).toContain("-extension_picky");
+    expect(a[a.indexOf("-extension_picky") + 1]).toBe("0");
+    expect(a).toContain("-allowed_extensions");
+    expect(a).toContain("ALL");
+    expect(a).toContain("-protocol_whitelist");
+    expect(a).not.toContain("-map");
+  });
+  it("비-HLS(mp4) src → HLS 전용 인자 없음", () => {
+    const a = buildFfmpegArgs("https://cdn/x.mp4", "/o.mp4", 0, 5);
+    expect(a).not.toContain("-extension_picky");
+    expect(a).not.toContain("-allowed_extensions");
+  });
 });
 
 // ── runDownload: 오케스트레이션(네트워크 없이 fake spawn/app) ──────────────────
