@@ -56,6 +56,11 @@ export async function runDownload(app: any, spawn: SpawnFn, opts: DownloadOpts):
   // 로컬 파일은 그대로, 그 외는 프록시 경유(needsProxy) 또는 원본 직접(needsProxy=false).
   // omitUa: ffmpeg URL 파서가 ua(공백/괄호)에서 깨지므로 다운로드는 ua 생략(프록시 DEFAULT_UA 사용).
   const src = r.filePath ? r.filePath : await proxiedUrl(app, r, { omitUa: true });
+  // 출력 폴더 보장 — 기본 {프로젝트}/playbox/clip 등은 없을 수 있고 ffmpeg 는 폴더를 안 만든다.
+  const dir = outPath.replace(/[/\\][^/\\]*$/, "");
+  if (dir && dir !== outPath) {
+    await spawn("mkdir", ["-p", dir]).catch(() => undefined);
+  }
   const args = buildFfmpegArgs(src, outPath, opts.startSec, opts.endSec);
   const res = await spawn("ffmpeg", args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
   if (res.code !== 0) {

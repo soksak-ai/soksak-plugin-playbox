@@ -49,13 +49,39 @@ export function applyDomainMap(url: string, pairs: Array<{ from: string; to: str
   return url;
 }
 
-// 초 → m:ss / h:mm:ss.
-export function fmtTime(sec: number): string {
-  let v = Number.isFinite(sec) && sec > 0 ? sec : 0;
+// 초 → m:ss / h:mm:ss. cs=true 면 .00(센티초)까지 — 클립 구간은 초 미만 정밀도로 표시/편집한다.
+export function fmtTime(sec: number, cs = false): string {
+  const v = Number.isFinite(sec) && sec > 0 ? sec : 0;
   const s = Math.floor(v % 60);
   const m = Math.floor((v / 60) % 60);
   const h = Math.floor(v / 3600);
   const mm = String(m).padStart(2, "0");
   const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  const base = h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  if (!cs) return base;
+  const c = Math.round((v - Math.floor(v)) * 100);
+  return `${base}.${String(c).padStart(2, "0")}`;
+}
+
+// fmtTime 역포맷 — "h:mm:ss.cs" / "m:ss.cs" / "ss.cs" → 초(소수 .00 포함). 잘못된 입력은 null.
+export function parseTime(str: string): number | null {
+  const s = String(str ?? "").trim();
+  if (!s) return null;
+  const parts = s.split(":");
+  if (parts.length > 3) return null;
+  let sec = 0;
+  for (const p of parts) {
+    if (p === "" || !Number.isFinite(Number(p))) return null;
+    sec = sec * 60 + Number(p);
+  }
+  return Number.isFinite(sec) && sec >= 0 ? sec : null;
+}
+
+// 다운로드 폴더 — 설정값이 있으면 그것, 없으면 기본 {프로젝트 루트}/playbox/clip. 루트 없으면 상대.
+export function downloadDir(app: { settings?: { get?: (k: string) => unknown }; project?: { current?: () => { root: string | null } | null } }): string {
+  const set = String(app?.settings?.get?.("downloadDir") ?? "").trim();
+  if (set) return set.replace(/\/+$/, "");
+  const root = app?.project?.current?.()?.root;
+  const base = typeof root === "string" && root ? root.replace(/\/+$/, "") : ".";
+  return `${base}/playbox/clip`;
 }
