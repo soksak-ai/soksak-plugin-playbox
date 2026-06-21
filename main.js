@@ -12751,7 +12751,7 @@ var require_jsx_runtime = __commonJS({
 });
 
 // src/plugin-entry.tsx
-var import_react3 = __toESM(require_react(), 1);
+var import_react4 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // src/view/PlayerView.tsx
@@ -12894,14 +12894,36 @@ function applyDomainMap(url, pairs) {
   }
   return url;
 }
-function fmtTime(sec) {
-  let v = Number.isFinite(sec) && sec > 0 ? sec : 0;
+function fmtTime(sec, cs = false) {
+  const v = Number.isFinite(sec) && sec > 0 ? sec : 0;
   const s = Math.floor(v % 60);
   const m = Math.floor(v / 60 % 60);
   const h = Math.floor(v / 3600);
   const mm = String(m).padStart(2, "0");
   const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  const base = h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+  if (!cs) return base;
+  const c = Math.round((v - Math.floor(v)) * 100);
+  return `${base}.${String(c).padStart(2, "0")}`;
+}
+function parseTime(str) {
+  const s = String(str ?? "").trim();
+  if (!s) return null;
+  const parts = s.split(":");
+  if (parts.length > 3) return null;
+  let sec = 0;
+  for (const p of parts) {
+    if (p === "" || !Number.isFinite(Number(p))) return null;
+    sec = sec * 60 + Number(p);
+  }
+  return Number.isFinite(sec) && sec >= 0 ? sec : null;
+}
+function downloadDir(app) {
+  const set = String(app?.settings?.get?.("downloadDir") ?? "").trim();
+  if (set) return set.replace(/\/+$/, "");
+  const root = app?.project?.current?.()?.root;
+  const base = typeof root === "string" && root ? root.replace(/\/+$/, "") : ".";
+  return `${base}/playbox/clip`;
 }
 
 // src/resolve/ytdlp.ts
@@ -13162,6 +13184,164 @@ async function resolveFull(app, raw, spawn) {
     }
   }
   return { resolved, input };
+}
+
+// src/data.ts
+var COLL = "library";
+var COLL_INDEXES = ["kind", "source", "favorite", "status", "createdAt"];
+var COLL_FTS = ["title", "inputUrl"];
+function asStr(v, d = "") {
+  return typeof v === "string" ? v : d;
+}
+function asNum(v, d = 0) {
+  return typeof v === "number" && Number.isFinite(v) ? v : d;
+}
+function genId() {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return "i-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1e9).toString(36);
+  }
+}
+function disposeOf(d) {
+  if (typeof d === "function") d();
+  else if (d && typeof d.dispose === "function") d.dispose();
+}
+function rowToItem(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw;
+  if (typeof r.id !== "string") return null;
+  const status2 = ["none", "downloading", "done", "error"].includes(r.status) ? r.status : void 0;
+  return {
+    id: r.id,
+    kind: r.kind === "clip" ? "clip" : "favorite",
+    title: asStr(r.title, r.id),
+    inputUrl: asStr(r.inputUrl),
+    source: asStr(r.source, "none"),
+    parentId: typeof r.parentId === "string" ? r.parentId : void 0,
+    startSec: typeof r.startSec === "number" ? r.startSec : void 0,
+    endSec: typeof r.endSec === "number" ? r.endSec : void 0,
+    filePath: typeof r.filePath === "string" ? r.filePath : void 0,
+    status: status2,
+    favorite: asNum(r.favorite, 1),
+    createdAt: asNum(r.createdAt, 0)
+  };
+}
+var lastTs = 0;
+function nextTs() {
+  const t = Math.max(Date.now(), lastTs + 1);
+  lastTs = t;
+  return t;
+}
+function buildItem(input) {
+  return {
+    id: input.id ?? genId(),
+    kind: input.kind,
+    title: input.title,
+    inputUrl: input.inputUrl,
+    source: input.source,
+    parentId: input.parentId,
+    startSec: input.startSec,
+    endSec: input.endSec,
+    filePath: input.filePath,
+    status: input.status,
+    favorite: input.favorite ?? 1,
+    createdAt: input.createdAt ?? nextTs()
+  };
+}
+async function ensureDefined(data) {
+  await data.define(COLL, { indexes: COLL_INDEXES, fts: COLL_FTS });
+}
+async function loadLibrary(data, scope) {
+  const rows = await data.query(COLL, { scope, order: "createdAt", desc: true, limit: 1e5 });
+  return rows.map(rowToItem).filter((n) => n != null).sort((a, b) => b.createdAt - a.createdAt);
+}
+async function searchLibrary(data, scope, text) {
+  const q = text.trim();
+  if (!q) return loadLibrary(data, scope);
+  if (data.search) {
+    try {
+      const rows = await data.search(COLL, text, { scope, limit: 1e3 });
+      const found = rows.map(rowToItem).filter((n) => n != null);
+      if (found.length) return found.sort((a, b) => b.createdAt - a.createdAt);
+    } catch {
+    }
+  }
+  const ql = q.toLowerCase();
+  const lib = await loadLibrary(data, scope);
+  return lib.filter((i) => i.title.toLowerCase().includes(ql) || i.inputUrl.toLowerCase().includes(ql));
+}
+async function putItem(data, scope, item) {
+  await data.put(COLL, item, { scope, id: item.id });
+}
+async function addItem(data, scope, input) {
+  const item = buildItem(input);
+  await putItem(data, scope, item);
+  return item;
+}
+async function patchItem(data, scope, id, patch) {
+  const lib = await loadLibrary(data, scope);
+  const cur = lib.find((i) => i.id === id);
+  if (!cur) return null;
+  const updated = { ...cur, ...patch, id };
+  await putItem(data, scope, updated);
+  return updated;
+}
+async function deleteLibraryItem(data, scope, id) {
+  return data.delete(COLL, id, { scope });
+}
+
+// src/proxy.ts
+async function proxiedUrl(app, r, opts) {
+  if (!r.needsProxy || !r.mediaUrl) return r.mediaUrl ?? "";
+  try {
+    const out = await app.commands.execute("media.proxy.info");
+    const base = out?.base ?? out?.result?.base;
+    if (!base) return r.mediaUrl;
+    const kind = r.kind === "hls" ? "m3u8" : "stream";
+    let u = `${base}/${kind}?url=${encodeURIComponent(r.mediaUrl)}`;
+    if (r.referer) u += `&referer=${encodeURIComponent(r.referer)}`;
+    if (r.userAgent && !opts?.omitUa) u += `&ua=${encodeURIComponent(r.userAgent)}`;
+    return u;
+  } catch {
+    return r.mediaUrl;
+  }
+}
+
+// src/download.ts
+function buildFfmpegArgs(src, outPath, startSec, endSec) {
+  const a = ["-y"];
+  const clip = typeof startSec === "number" && typeof endSec === "number" && Number.isFinite(startSec) && Number.isFinite(endSec) && endSec > startSec;
+  if (clip) a.push("-ss", String(startSec));
+  a.push("-i", src);
+  if (clip) a.push("-t", String(endSec - startSec));
+  a.push("-c", "copy", outPath);
+  return a;
+}
+async function runDownload(app, spawn, opts) {
+  const input = String(opts?.inputUrl ?? "").trim();
+  const outPath = String(opts?.outPath ?? "").trim();
+  if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
+  if (!outPath) return { ok: false, code: "INVALID_PARAMS", message: "outPath \uD544\uC694" };
+  const { resolved: r } = await resolveFull(app, input, spawn);
+  if (r.kind === "youtube") {
+    return { ok: false, code: "NO_STREAM", message: "iframe \uC784\uBCA0\uB4DC\uB294 \uB2E4\uC6B4\uB85C\uB4DC \uBD88\uAC00(\uC2A4\uD2B8\uB9BC URL \uC5C6\uC74C)" };
+  }
+  const hasMedia = Boolean(r.mediaUrl) || Boolean(r.filePath);
+  if (r.kind === "unsupported" || !hasMedia) {
+    return { ok: false, code: "NO_STREAM", message: r.reason ?? "\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC2A4\uD2B8\uB9BC\uC744 \uCC3E\uC9C0 \uBABB\uD568" };
+  }
+  const src = r.filePath ? r.filePath : await proxiedUrl(app, r, { omitUa: true });
+  const dir = outPath.replace(/[/\\][^/\\]*$/, "");
+  if (dir && dir !== outPath) {
+    await spawn("mkdir", ["-p", dir]).catch(() => void 0);
+  }
+  const args = buildFfmpegArgs(src, outPath, opts.startSec, opts.endSec);
+  const res = await spawn("ffmpeg", args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
+  if (res.code !== 0) {
+    return { ok: false, code: "FFMPEG_FAILED", message: (res.stderr || "").slice(-400) || "ffmpeg \uC2E4\uD328" };
+  }
+  return { ok: true, path: outPath };
 }
 
 // node_modules/hls.js/dist/hls.mjs
@@ -46208,26 +46388,9 @@ function attachHls(video, src) {
   };
 }
 
-// src/proxy.ts
-async function proxiedUrl(app, r, opts) {
-  if (!r.needsProxy || !r.mediaUrl) return r.mediaUrl ?? "";
-  try {
-    const out = await app.commands.execute("media.proxy.info");
-    const base = out?.base ?? out?.result?.base;
-    if (!base) return r.mediaUrl;
-    const kind = r.kind === "hls" ? "m3u8" : "stream";
-    let u = `${base}/${kind}?url=${encodeURIComponent(r.mediaUrl)}`;
-    if (r.referer) u += `&referer=${encodeURIComponent(r.referer)}`;
-    if (r.userAgent && !opts?.omitUa) u += `&ua=${encodeURIComponent(r.userAgent)}`;
-    return u;
-  } catch {
-    return r.mediaUrl;
-  }
-}
-
 // src/view/PlayerView.tsx
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
-function PlayerView({ app, store }) {
+function PlayerView({ app, scope, signal }) {
   const [media, setMedia] = (0, import_react.useState)(null);
   const [currentInput, setCurrentInput] = (0, import_react.useState)(null);
   const [clipStart, setClipStart] = (0, import_react.useState)(null);
@@ -46236,6 +46399,9 @@ function PlayerView({ app, store }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
   const [url, setUrl] = (0, import_react.useState)("");
   const [dragOver, setDragOver] = (0, import_react.useState)(false);
+  const [pstate, setPstate] = (0, import_react.useState)({ t: 0, paused: true, ready: 0 });
+  const [clipRange, setClipRange] = (0, import_react.useState)(null);
+  const [loop, setLoop] = (0, import_react.useState)(true);
   const videoRef = (0, import_react.useRef)(null);
   const fileRef = (0, import_react.useRef)(null);
   (0, import_react.useEffect)(() => {
@@ -46243,6 +46409,46 @@ function PlayerView({ app, store }) {
       return attachHls(videoRef.current, media.src);
     }
   }, [media]);
+  const onVideoState = (0, import_react.useCallback)(
+    (e) => {
+      const v = e.currentTarget;
+      setPstate({ t: v.currentTime, paused: v.paused, ready: v.readyState });
+      signal?.setPlayerState({
+        inputUrl: currentInput,
+        currentTime: v.currentTime,
+        duration: Number.isFinite(v.duration) ? v.duration : 0,
+        paused: v.paused,
+        clip: clipRange,
+        loop
+      });
+      if (clipRange && v.currentTime >= clipRange.end - 0.05) {
+        if (loop) {
+          try {
+            v.currentTime = clipRange.start;
+            void v.play();
+          } catch {
+          }
+        } else {
+          v.pause();
+        }
+      }
+    },
+    [clipRange, loop, signal, currentInput]
+  );
+  const onLoadedMeta = (0, import_react.useCallback)(
+    (e) => {
+      const v = e.currentTarget;
+      if (clipRange) {
+        try {
+          v.currentTime = clipRange.start;
+          void v.play();
+        } catch {
+        }
+      }
+      setPstate({ t: v.currentTime, paused: v.paused, ready: v.readyState });
+    },
+    [clipRange]
+  );
   const showFlash = (0, import_react.useCallback)((msg) => {
     setFlash(msg);
     window.setTimeout(() => setFlash((cur) => cur === msg ? null : cur), 2200);
@@ -46288,30 +46494,51 @@ function PlayerView({ app, store }) {
   const playFile = (0, import_react.useCallback)((file) => {
     setError(null);
     setClipStart(null);
+    setClipRange(null);
     setMedia({ mode: "video", src: URL.createObjectURL(file), title: file.name });
     setCurrentInput(file.name);
   }, []);
   (0, import_react.useEffect)(() => {
-    if (!store) return;
+    if (!signal) return;
     const handle = () => {
-      const p = store.consumePlay();
+      const p = signal.consumePlay();
       if (p) {
         setUrl(p.inputUrl);
+        const hasRange = typeof p.startSec === "number" && typeof p.endSec === "number";
+        setClipRange(hasRange ? { start: p.startSec, end: p.endSec } : null);
+        setLoop(hasRange);
         void playInput(p.inputUrl);
       }
     };
     handle();
-    return store.subscribe(handle);
-  }, [store, playInput]);
+    return signal.subscribe(handle);
+  }, [signal, playInput]);
+  (0, import_react.useEffect)(() => {
+    if (!signal) return;
+    const handle = () => {
+      const v = videoRef.current;
+      if (!v) return;
+      const c = signal.consumeControl();
+      if (!c) return;
+      if (c.action === "toggleLoop") setLoop((l) => !l);
+      else if (c.action === "play") void v.play();
+      else if (c.action === "pause") v.pause();
+      else if (c.action === "seek" && typeof c.seconds === "number") v.currentTime = c.seconds;
+    };
+    return signal.subscribe(handle);
+  }, [signal]);
+  (0, import_react.useEffect)(() => {
+    if (!media) signal?.setPlayerState(null);
+  }, [media, signal]);
   const markStart = (0, import_react.useCallback)(() => {
     const t = videoRef.current?.currentTime;
     if (t == null) return;
     setClipStart(t);
-    showFlash(`\uD074\uB9BD \uC2DC\uC791 ${fmtTime(t)} \u2014 \uB05D \uC9C0\uC810\uC5D0\uC11C ]`);
+    showFlash(`\uD074\uB9BD \uC2DC\uC791 ${fmtTime(t, true)} \u2014 \uB05D \uC9C0\uC810\uC5D0\uC11C ]`);
   }, [showFlash]);
   const markEnd = (0, import_react.useCallback)(async () => {
     const t = videoRef.current?.currentTime;
-    if (t == null || clipStart == null || !currentInput) {
+    if (t == null || clipStart == null || !currentInput || !app?.data) {
       showFlash("\uBA3C\uC800 [ \uB85C \uC2DC\uC791 \uC9C0\uC810\uC744 \uD45C\uC2DC\uD558\uC138\uC694");
       return;
     }
@@ -46322,23 +46549,21 @@ function PlayerView({ app, store }) {
       return;
     }
     try {
-      await app.commands.execute("clip.add", { inputUrl: currentInput, startSec, endSec });
-      showFlash(`\uD074\uB9BD \uC800\uC7A5 ${fmtTime(startSec)}\u2013${fmtTime(endSec)}`);
+      const c = classify(currentInput);
+      const title = `${c.title} [${fmtTime(startSec, true)}\u2013${fmtTime(endSec, true)}]`;
+      await addItem(app.data, scope, { kind: "clip", title, inputUrl: currentInput, source: c.source, startSec, endSec });
+      showFlash(`\uD074\uB9BD \uC800\uC7A5 ${fmtTime(startSec, true)}\u2013${fmtTime(endSec, true)}`);
     } catch {
       showFlash("\uD074\uB9BD \uC800\uC7A5 \uC2E4\uD328");
     }
     setClipStart(null);
-  }, [app, clipStart, currentInput, showFlash]);
+  }, [app, scope, clipStart, currentInput, showFlash]);
   const downloadCurrent = (0, import_react.useCallback)(async () => {
     if (!currentInput) {
       showFlash("\uC7AC\uC0DD \uC911\uC778 \uC785\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4");
       return;
     }
-    const dir = String(app?.settings?.get?.("downloadDir") ?? "").trim();
-    if (!dir) {
-      showFlash("\uC124\uC815\uC5D0\uC11C \uB2E4\uC6B4\uB85C\uB4DC \uD3F4\uB354\uB97C \uBA3C\uC800 \uC9C0\uC815\uD558\uC138\uC694");
-      return;
-    }
+    const dir = downloadDir(app);
     const t = videoRef.current?.currentTime ?? null;
     const isClip = clipStart != null && t != null && Math.abs(t - clipStart) >= 0.1;
     const startSec = isClip ? Math.min(clipStart, t) : void 0;
@@ -46348,10 +46573,8 @@ function PlayerView({ app, store }) {
     const outPath = `${dir.replace(/\/+$/, "")}/${base}${tag}.mp4`;
     showFlash(isClip ? "\uAD6C\uAC04 \uB2E4\uC6B4\uB85C\uB4DC \uC2DC\uC791\u2026" : "\uB2E4\uC6B4\uB85C\uB4DC \uC2DC\uC791\u2026");
     try {
-      const raw = await app.commands.execute("download", { inputUrl: currentInput, outPath, startSec, endSec });
-      const res = raw && typeof raw === "object" && "result" in raw ? raw.result : raw;
-      if (res?.ok) showFlash(`\uC800\uC7A5\uB428: ${res.path ?? outPath}`);
-      else showFlash(`\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${res?.message ?? "\uC624\uB958"}`);
+      const res = await runDownload(app, makeSpawn(app), { inputUrl: currentInput, outPath, startSec, endSec });
+      showFlash(res.ok ? `\uC800\uC7A5\uB428: ${res.path ?? outPath}` : `\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${res.message ?? "\uC624\uB958"}`);
     } catch (e) {
       showFlash(`\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -46370,6 +46593,7 @@ function PlayerView({ app, store }) {
   );
   const submitUrl = (0, import_react.useCallback)(() => {
     if (busy) return;
+    setClipRange(null);
     void playInput(url);
   }, [busy, url, playInput]);
   const onDrop = (0, import_react.useCallback)(
@@ -46384,6 +46608,7 @@ function PlayerView({ app, store }) {
       const u = (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain")).trim();
       if (u) {
         setUrl(u);
+        setClipRange(null);
         void playInput(u);
       }
     },
@@ -46392,10 +46617,27 @@ function PlayerView({ app, store }) {
   if (media) {
     const canClip = media.mode !== "iframe";
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pb-root", tabIndex: 0, onKeyDown: onMediaKey, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { "data-node": `debug/${signal?.id() ?? "nil"}/${scope}/${currentInput ? 1 : 0}`, style: { display: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { "data-node": `playstate/${Math.round(pstate.t * 100)}/${pstate.paused ? 1 : 0}/${pstate.ready}`, style: { display: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { "data-node": `clipstate/${clipRange ? Math.round(clipRange.start * 100) : -1}/${clipRange ? Math.round(clipRange.end * 100) : -1}/${loop ? 1 : 0}`, style: { display: "none" } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "pb-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pb-icon", children: "\u25B7" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "pb-row-title", children: media.title ?? "Player" }),
         canClip && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          clipRange && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "button",
+            {
+              className: "pb-btn pb-btn-ghost",
+              "data-node": "loop",
+              onClick: () => setLoop((l) => !l),
+              title: loop ? "\uAD6C\uAC04 \uBC18\uBCF5 \uB044\uAE30" : "\uAD6C\uAC04 \uBC18\uBCF5 \uCF1C\uAE30",
+              style: { opacity: loop ? 1 : 0.45 },
+              children: [
+                "\u27F3 ",
+                loop ? "\uBC18\uBCF5" : "1\uD68C"
+              ]
+            }
+          ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "clip-start", onClick: markStart, children: "[ \uC2DC\uC791" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "clip-end", onClick: () => void markEnd(), children: "] \uD074\uB9BD" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "download", onClick: () => void downloadCurrent(), children: "\u2193 \uC800\uC7A5" })
@@ -46420,7 +46662,12 @@ function PlayerView({ app, store }) {
           "data-node": "video",
           src: media.mode === "video" ? media.src : void 0,
           controls: true,
-          autoPlay: true
+          autoPlay: true,
+          onTimeUpdate: onVideoState,
+          onPlay: onVideoState,
+          onPause: onVideoState,
+          onLoadedData: onVideoState,
+          onLoadedMetadata: onLoadedMeta
         }
       ) })
     ] });
@@ -46485,19 +46732,47 @@ function PlayerView({ app, store }) {
 }
 
 // src/view/LibrarySidebar.tsx
+var import_react3 = __toESM(require_react(), 1);
+
+// src/view/useLibrary.ts
 var import_react2 = __toESM(require_react(), 1);
-var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
-function LibrarySidebar({ app, store }) {
-  const [, setTick] = (0, import_react2.useState)(0);
-  const [url, setUrl] = (0, import_react2.useState)("");
-  const [q, setQ] = (0, import_react2.useState)("");
-  const [kind, setKind] = (0, import_react2.useState)("all");
+function useLibrary(data, scope) {
+  const [items, setItems] = (0, import_react2.useState)([]);
   (0, import_react2.useEffect)(() => {
-    if (!store) return;
-    return store.subscribe(() => setTick((t) => t + 1));
-  }, [store]);
-  const all = store ? store.get() : [];
-  const items = (0, import_react2.useMemo)(() => {
+    if (!data) return;
+    let alive = true;
+    const reload = () => {
+      void loadLibrary(data, scope).then((rows) => {
+        if (alive) setItems(rows);
+      });
+    };
+    void ensureDefined(data).then(reload, reload);
+    const un = data.watch(COLL, { scope }, reload);
+    return () => {
+      alive = false;
+      disposeOf(un);
+    };
+  }, [data, scope]);
+  return items;
+}
+
+// src/view/LibrarySidebar.tsx
+var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
+function LibrarySidebar({ app, scope, signal }) {
+  const [url, setUrl] = (0, import_react3.useState)("");
+  const [q, setQ] = (0, import_react3.useState)("");
+  const [kind, setKind] = (0, import_react3.useState)("all");
+  const [editingId, setEditingId] = (0, import_react3.useState)(null);
+  const [editStart, setEditStart] = (0, import_react3.useState)("");
+  const [editEnd, setEditEnd] = (0, import_react3.useState)("");
+  const [flash, setFlash] = (0, import_react3.useState)(null);
+  const [dlState, setDlState] = (0, import_react3.useState)("idle");
+  const showFlash = (0, import_react3.useCallback)((m) => {
+    setFlash(m);
+    window.setTimeout(() => setFlash((c) => c === m ? null : c), 2600);
+  }, []);
+  const all = useLibrary(app?.data, scope);
+  const items = (0, import_react3.useMemo)(() => {
     const needle = q.trim().toLowerCase();
     return all.filter((i) => {
       if (kind !== "all" && i.kind !== kind) return false;
@@ -46505,32 +46780,88 @@ function LibrarySidebar({ app, store }) {
       return i.title.toLowerCase().includes(needle) || i.inputUrl.toLowerCase().includes(needle);
     });
   }, [all, q, kind]);
-  const add = (0, import_react2.useCallback)(async () => {
+  const add = (0, import_react3.useCallback)(async () => {
     const v = url.trim();
-    if (!v || !store) return;
+    if (!v || !app?.data) return;
     const c = classify(v);
-    await store.add({ kind: "favorite", title: c.title, inputUrl: v, source: c.source });
+    await addItem(app.data, scope, { kind: "favorite", title: c.title, inputUrl: v, source: c.source });
     setUrl("");
-  }, [url, store]);
-  const play = (0, import_react2.useCallback)(
+  }, [url, app, scope]);
+  const play = (0, import_react3.useCallback)(
     (item) => {
-      store?.requestPlay({ inputUrl: item.inputUrl, title: item.title });
+      signal?.requestPlay({
+        inputUrl: item.inputUrl,
+        title: item.title,
+        startSec: item.kind === "clip" ? item.startSec : void 0,
+        endSec: item.kind === "clip" ? item.endSec : void 0
+      });
       app?.ui?.openView?.("player", "content");
     },
-    [app, store]
+    [app, signal]
   );
-  const remove = (0, import_react2.useCallback)(
+  const remove = (0, import_react3.useCallback)(
     (e, id) => {
       e.stopPropagation();
-      void store?.remove(id);
+      if (app?.data) void deleteLibraryItem(app.data, scope, id);
     },
-    [store]
+    [app, scope]
+  );
+  const startEdit = (0, import_react3.useCallback)((e, item) => {
+    e.stopPropagation();
+    setEditingId(item.id);
+    setEditStart(fmtTime(item.startSec ?? 0, true));
+    setEditEnd(fmtTime(item.endSec ?? 0, true));
+  }, []);
+  const saveEdit = (0, import_react3.useCallback)(
+    async (item) => {
+      const start = parseTime(editStart);
+      const end = parseTime(editEnd);
+      if (!app?.data || start == null || end == null || end <= start) {
+        showFlash("\uC2DC\uAC04 \uD615\uC2DD: \uBD84:\uCD08.00 (\uC608 1:23.50)");
+        return;
+      }
+      const base = item.title.replace(/\s*\[[^\]]*\]\s*$/, "");
+      const title = `${base} [${fmtTime(start, true)}\u2013${fmtTime(end, true)}]`;
+      await patchItem(app.data, scope, item.id, { startSec: start, endSec: end, title });
+      setEditingId(null);
+    },
+    [app, scope, editStart, editEnd, showFlash]
+  );
+  const cancelEdit = (0, import_react3.useCallback)(() => setEditingId(null), []);
+  const downloadItem = (0, import_react3.useCallback)(
+    async (e, item) => {
+      e.stopPropagation();
+      const dir = downloadDir(app);
+      const isClip = item.kind === "clip" && typeof item.startSec === "number" && typeof item.endSec === "number";
+      const base = (item.title || "video").replace(/[^\w.\-가-힣]+/g, "_").slice(0, 80) || "video";
+      const tag = isClip ? `_${Math.round(item.startSec)}-${Math.round(item.endSec)}` : "";
+      const outPath = `${dir.replace(/\/+$/, "")}/${base}${tag}.mp4`;
+      showFlash(isClip ? "\uAD6C\uAC04 \uB2E4\uC6B4\uB85C\uB4DC \uC2DC\uC791\u2026" : "\uB2E4\uC6B4\uB85C\uB4DC \uC2DC\uC791\u2026");
+      setDlState("busy");
+      try {
+        const res = await runDownload(app, makeSpawn(app), {
+          inputUrl: item.inputUrl,
+          outPath,
+          startSec: isClip ? item.startSec : void 0,
+          endSec: isClip ? item.endSec : void 0
+        });
+        setDlState(res.ok ? "ok" : "fail");
+        showFlash(res.ok ? `\uC800\uC7A5\uB428: ${res.path ?? outPath}` : `\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${res.message ?? "\uC624\uB958"}`);
+      } catch (err) {
+        setDlState("fail");
+        showFlash(`\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [app, scope, showFlash]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "pb-root", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { "data-node": `debug/${signal?.id() ?? "nil"}/${scope}/${all.length}`, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { "data-node": `dlstate/${dlState}`, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "pb-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "pb-icon", children: "\u25B6" }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: "Playbox" })
     ] }),
+    flash && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "pb-flash", "data-node": "lib-flash", children: flash }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "pb-body", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { padding: "10px 10px 6px" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "pb-url-row", children: [
@@ -46577,30 +46908,95 @@ function LibrarySidebar({ app, store }) {
           )
         ] })
       ] }),
-      items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "pb-hint", children: all.length === 0 ? "URL \uC744 \uCD94\uAC00\uD558\uAC70\uB098, \uD50C\uB808\uC774\uC5B4\uC5D0\uC11C \uC7AC\uC0DD \uC911 [ / ] \uB85C \uD074\uB9BD\uC744 \uB9CC\uB4E4\uC5B4 \uBCF4\uC138\uC694." : "\uD544\uD130\uC5D0 \uB9DE\uB294 \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "pb-list", "data-node": "list", children: items.map((i) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-        "div",
-        {
-          className: "pb-row",
-          "data-node": `item/${i.id}`,
-          onClick: () => play(i),
-          title: i.inputUrl,
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "pb-row-kind", children: i.kind === "clip" ? "CLIP" : "\u2605" }),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "pb-row-title", children: i.title }),
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-              "button",
-              {
-                className: "pb-btn pb-btn-ghost",
-                "data-node": `remove/${i.id}`,
-                onClick: (e) => remove(e, i.id),
-                style: { padding: "2px 7px" },
-                children: "\u2715"
-              }
-            )
-          ]
-        },
-        i.id
-      )) })
+      items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "pb-hint", children: all.length === 0 ? "URL \uC744 \uCD94\uAC00\uD558\uAC70\uB098, \uD50C\uB808\uC774\uC5B4\uC5D0\uC11C \uC7AC\uC0DD \uC911 [ / ] \uB85C \uD074\uB9BD\uC744 \uB9CC\uB4E4\uC5B4 \uBCF4\uC138\uC694." : "\uD544\uD130\uC5D0 \uB9DE\uB294 \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "pb-list", "data-node": "list", children: items.map((i) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+          "div",
+          {
+            className: "pb-row",
+            "data-node": `item/${i.id}`,
+            onClick: () => editingId === i.id ? void 0 : play(i),
+            title: i.inputUrl,
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "pb-row-kind", children: i.kind === "clip" ? "CLIP" : "\u2605" }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "pb-row-title", children: i.title }),
+              i.kind === "clip" && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "button",
+                {
+                  className: "pb-btn pb-btn-ghost",
+                  "data-node": `edit/${i.id}`,
+                  onClick: (e) => startEdit(e, i),
+                  title: "\uC2DC\uC791/\uC885\uB8CC \uC218\uC815",
+                  style: { padding: "2px 7px" },
+                  children: "\u270E"
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "button",
+                {
+                  className: "pb-btn pb-btn-ghost",
+                  "data-node": `download/${i.id}`,
+                  onClick: (e) => void downloadItem(e, i),
+                  title: i.kind === "clip" ? "\uAD6C\uAC04 \uB2E4\uC6B4\uB85C\uB4DC" : "\uB2E4\uC6B4\uB85C\uB4DC",
+                  style: { padding: "2px 7px" },
+                  children: "\u2B07"
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "button",
+                {
+                  className: "pb-btn pb-btn-ghost",
+                  "data-node": `remove/${i.id}`,
+                  onClick: (e) => remove(e, i.id),
+                  style: { padding: "2px 7px" },
+                  children: "\u2715"
+                }
+              )
+            ]
+          }
+        ),
+        editingId === i.id && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+          "div",
+          {
+            className: "pb-edit",
+            "data-node": `edit-panel/${i.id}`,
+            onClick: (e) => e.stopPropagation(),
+            style: { display: "flex", gap: 6, padding: "6px 10px", alignItems: "center", flexWrap: "wrap" },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "input",
+                {
+                  className: "pb-input",
+                  "data-node": "clip-edit-start",
+                  type: "text",
+                  inputMode: "decimal",
+                  value: editStart,
+                  onChange: (e) => setEditStart(e.target.value),
+                  placeholder: "0:00.00",
+                  title: "\uC2DC\uC791 \u2014 \uC2DC:\uBD84:\uCD08.00 (\uC608 1:23.50)",
+                  style: { width: 92 }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: "\u2013" }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "input",
+                {
+                  className: "pb-input",
+                  "data-node": "clip-edit-end",
+                  type: "text",
+                  inputMode: "decimal",
+                  value: editEnd,
+                  onChange: (e) => setEditEnd(e.target.value),
+                  placeholder: "0:00.00",
+                  title: "\uC885\uB8CC \u2014 \uC2DC:\uBD84:\uCD08.00 (\uC608 1:23.50)",
+                  style: { width: 92 }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "pb-btn", "data-node": "clip-edit-save", onClick: () => void saveEdit(i), children: "\uC800\uC7A5" }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "pb-btn pb-btn-ghost", "data-node": "clip-edit-cancel", onClick: cancelEdit, children: "\uCDE8\uC18C" })
+            ]
+          }
+        )
+      ] }, i.id)) })
     ] })
   ] });
 }
@@ -46610,10 +47006,11 @@ var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
 function App({
   viewId,
   app,
-  store
+  scope,
+  signal
 }) {
-  if (viewId === "player") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PlayerView, { app, store });
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(LibrarySidebar, { app, store });
+  if (viewId === "player") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PlayerView, { app, scope, signal });
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(LibrarySidebar, { app, scope, signal });
 }
 
 // src/styles.ts
@@ -46681,141 +47078,22 @@ var GLOBAL_CSS = `
 .pb-row-kind { font-size: 10px; color: var(--fg3, #888); padding: 1px 5px; border: 1px solid var(--bd,#3a3a3a); border-radius: 4px; }
 `;
 
-// src/store.ts
-var COLL = "library";
-function asStr(v, d = "") {
-  return typeof v === "string" ? v : d;
-}
-function asNum(v, d = 0) {
-  return typeof v === "number" && Number.isFinite(v) ? v : d;
-}
-function rowToItem(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw;
-  if (typeof r.id !== "string") return null;
-  const status2 = ["none", "downloading", "done", "error"].includes(r.status) ? r.status : void 0;
-  return {
-    id: r.id,
-    kind: r.kind === "clip" ? "clip" : "favorite",
-    title: asStr(r.title, r.id),
-    inputUrl: asStr(r.inputUrl),
-    source: asStr(r.source, "none"),
-    parentId: typeof r.parentId === "string" ? r.parentId : void 0,
-    startSec: typeof r.startSec === "number" ? r.startSec : void 0,
-    endSec: typeof r.endSec === "number" ? r.endSec : void 0,
-    filePath: typeof r.filePath === "string" ? r.filePath : void 0,
-    status: status2,
-    favorite: asNum(r.favorite, 1),
-    createdAt: asNum(r.createdAt, 0)
-  };
-}
-function disposeOf(d) {
-  if (typeof d === "function") d();
-  else if (d && typeof d.dispose === "function") d.dispose();
-}
-function genId() {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return "i-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1e9).toString(36);
-  }
-}
-function createStore(app) {
-  const data = app.data;
-  const scope = app.project?.current?.()?.id ?? "default";
-  let items = [];
-  let writing = 0;
+// src/signal.ts
+function createSignal(scope) {
+  const instanceId = genId().slice(0, 6);
   let pendingPlay = null;
+  let pendingControl = null;
+  let playerState = null;
   const subs = /* @__PURE__ */ new Set();
-  let watchSub = null;
   const notify = () => {
     for (const cb of subs) cb();
   };
-  let lastTs = 0;
-  const now2 = () => {
-    const t = Math.max(Date.now(), lastTs + 1);
-    lastTs = t;
-    return t;
-  };
-  async function hydrate() {
-    if (!data) return;
-    const rows = await data.query(COLL, { scope, order: "createdAt", desc: true, limit: 1e5 });
-    items = rows.map(rowToItem).filter((n) => n != null).sort((a, b) => b.createdAt - a.createdAt);
-    notify();
-  }
-  async function persistPut(item) {
-    if (!data) return;
-    writing++;
-    try {
-      await data.put(COLL, item, { scope, id: item.id });
-    } finally {
-      writing--;
-    }
-  }
   return {
-    get: () => items,
     scope: () => scope,
+    id: () => instanceId,
     subscribe(cb) {
       subs.add(cb);
       return () => subs.delete(cb);
-    },
-    async add(input) {
-      const item = {
-        id: input.id ?? genId(),
-        kind: input.kind,
-        title: input.title,
-        inputUrl: input.inputUrl,
-        source: input.source,
-        parentId: input.parentId,
-        startSec: input.startSec,
-        endSec: input.endSec,
-        filePath: input.filePath,
-        status: input.status,
-        favorite: input.favorite ?? 1,
-        createdAt: input.createdAt ?? now2()
-      };
-      items = [item, ...items];
-      notify();
-      await persistPut(item);
-      return item;
-    },
-    async update(id, patch) {
-      const idx = items.findIndex((i) => i.id === id);
-      if (idx < 0) return null;
-      const updated = { ...items[idx], ...patch, id };
-      items = [...items.slice(0, idx), updated, ...items.slice(idx + 1)];
-      notify();
-      await persistPut(updated);
-      return updated;
-    },
-    async remove(id) {
-      const had = items.some((i) => i.id === id);
-      items = items.filter((i) => i.id !== id);
-      notify();
-      if (data && had) {
-        writing++;
-        try {
-          await data.delete(COLL, id, { scope });
-        } finally {
-          writing--;
-        }
-      }
-      return had;
-    },
-    async search(text) {
-      const q = text.trim().toLowerCase();
-      if (!q) return items;
-      if (data?.search) {
-        try {
-          const rows = await data.search(COLL, text, { scope, limit: 1e3 });
-          const found = rows.map(rowToItem).filter((n) => n != null);
-          if (found.length) return found.sort((a, b) => b.createdAt - a.createdAt);
-        } catch {
-        }
-      }
-      return items.filter(
-        (i) => i.title.toLowerCase().includes(q) || i.inputUrl.toLowerCase().includes(q)
-      );
     },
     requestPlay(p) {
       pendingPlay = p;
@@ -46826,55 +47104,21 @@ function createStore(app) {
       pendingPlay = null;
       return p;
     },
-    async init() {
-      if (!data) return;
-      await data.define(COLL, {
-        indexes: ["kind", "source", "favorite", "status", "createdAt"],
-        fts: ["title", "inputUrl"]
-      });
-      await hydrate();
-      watchSub = data.watch(COLL, { scope }, () => {
-        if (writing === 0) void hydrate();
-      });
+    // read 전용 — notify 안 함(렌더 루프 방지). player.state 커맨드가 read.
+    setPlayerState(s) {
+      playerState = s;
     },
-    dispose() {
-      if (watchSub) disposeOf(watchSub);
-      watchSub = null;
-      subs.clear();
+    getPlayerState: () => playerState,
+    requestControl(c) {
+      pendingControl = c;
+      notify();
+    },
+    consumeControl() {
+      const c = pendingControl;
+      pendingControl = null;
+      return c;
     }
   };
-}
-
-// src/download.ts
-function buildFfmpegArgs(src, outPath, startSec, endSec) {
-  const a = ["-y"];
-  const clip = typeof startSec === "number" && typeof endSec === "number" && Number.isFinite(startSec) && Number.isFinite(endSec) && endSec > startSec;
-  if (clip) a.push("-ss", String(startSec));
-  a.push("-i", src);
-  if (clip) a.push("-t", String(endSec - startSec));
-  a.push("-c", "copy", outPath);
-  return a;
-}
-async function runDownload(app, spawn, opts) {
-  const input = String(opts?.inputUrl ?? "").trim();
-  const outPath = String(opts?.outPath ?? "").trim();
-  if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
-  if (!outPath) return { ok: false, code: "INVALID_PARAMS", message: "outPath \uD544\uC694" };
-  const { resolved: r } = await resolveFull(app, input, spawn);
-  if (r.kind === "youtube") {
-    return { ok: false, code: "NO_STREAM", message: "iframe \uC784\uBCA0\uB4DC\uB294 \uB2E4\uC6B4\uB85C\uB4DC \uBD88\uAC00(\uC2A4\uD2B8\uB9BC URL \uC5C6\uC74C)" };
-  }
-  const hasMedia = Boolean(r.mediaUrl) || Boolean(r.filePath);
-  if (r.kind === "unsupported" || !hasMedia) {
-    return { ok: false, code: "NO_STREAM", message: r.reason ?? "\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC2A4\uD2B8\uB9BC\uC744 \uCC3E\uC9C0 \uBABB\uD568" };
-  }
-  const src = r.filePath ? r.filePath : await proxiedUrl(app, r, { omitUa: true });
-  const args = buildFfmpegArgs(src, outPath, opts.startSec, opts.endSec);
-  const res = await spawn("ffmpeg", args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
-  if (res.code !== 0) {
-    return { ok: false, code: "FFMPEG_FAILED", message: (res.stderr || "").slice(-400) || "ffmpeg \uC2E4\uD328" };
-  }
-  return { ok: true, path: outPath };
 }
 
 // src/commands.ts
@@ -46888,21 +47132,35 @@ function platformInstall(tool) {
   if (tool === "yt-dlp") return { cmd: "pip", args: ["install", "-U", "yt-dlp"] };
   return null;
 }
-function registerCommands(ctx, store, app) {
+function registerCommands(ctx, getSignal2, app) {
   const spawn = makeSpawn(app);
   const reg = (name, spec) => ctx.subscriptions.push(app.commands.register(name, spec));
+  const scopeFor = (p) => String(p?.projectId ?? app.project?.current?.()?.id ?? "default");
+  const data = () => app.data;
+  const sig = (p) => getSignal2(scopeFor(p));
+  const projectIdParam = { type: "string", description: "\uD504\uB85C\uC81D\uD2B8 id(\uC0DD\uB7B5=\uD65C\uC131 \uD504\uB85C\uC81D\uD2B8)" };
+  reg("debug", {
+    description: "\uC778\uC2A4\uD134\uC2A4 \uC9C4\uB2E8 \u2014 { instanceId, scope, count, downloadDir }. \uBDF0 debug \uB178\uB4DC\uC640 \uB300\uC870.",
+    params: { projectId: projectIdParam },
+    returns: "{ instanceId, scope, count, downloadDir }",
+    handler: async (p) => {
+      const items = await loadLibrary(data(), scopeFor(p));
+      return { instanceId: sig(p).id(), scope: scopeFor(p), count: items.length, downloadDir: downloadDir(app) };
+    }
+  });
   reg("favorite.add", {
     description: "URL \uC744 \uC990\uACA8\uCC3E\uAE30\uB85C \uB77C\uC774\uBE0C\uB7EC\uB9AC\uC5D0 \uCD94\uAC00(\uD574\uC11D\uC740 \uC7AC\uC0DD \uC2DC). inputUrl \uD544\uC218.",
     params: {
       inputUrl: { type: "string", description: "\uBE44\uB514\uC624 URL \uB610\uB294 \uD30C\uC77C \uACBD\uB85C", required: true },
-      title: { type: "string", description: "\uD45C\uC2DC \uC81C\uBAA9(\uC0DD\uB7B5 \uC2DC \uC790\uB3D9)" }
+      title: { type: "string", description: "\uD45C\uC2DC \uC81C\uBAA9(\uC0DD\uB7B5 \uC2DC \uC790\uB3D9)" },
+      projectId: projectIdParam
     },
     returns: "{ id, item }",
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
       const c = classify(input);
-      const item = await store.add({
+      const item = await addItem(data(), scopeFor(p), {
         kind: "favorite",
         title: String(p?.title ?? c.title),
         inputUrl: input,
@@ -46913,18 +47171,19 @@ function registerCommands(ctx, store, app) {
   });
   reg("favorite.remove", {
     description: "\uB77C\uC774\uBE0C\uB7EC\uB9AC \uD56D\uBAA9 \uC0AD\uC81C(\uC990\uACA8\uCC3E\uAE30/\uD074\uB9BD \uACF5\uD1B5). id \uD544\uC218.",
-    params: { id: { type: "string", description: "\uD56D\uBAA9 id", required: true } },
+    params: { id: { type: "string", description: "\uD56D\uBAA9 id", required: true }, projectId: projectIdParam },
     returns: "{ removed }",
     danger: "destructive",
-    handler: async (p) => ({ removed: await store.remove(String(p?.id ?? "")) })
+    handler: async (p) => ({ removed: await deleteLibraryItem(data(), scopeFor(p), String(p?.id ?? "")) })
   });
   reg("library.list", {
     description: "\uB77C\uC774\uBE0C\uB7EC\uB9AC \uBAA9\uB85D(\uC990\uACA8\uCC3E\uAE30+\uD074\uB9BD). kind \uB85C \uC881\uD78C\uB2E4(favorite|clip).",
-    params: { kind: { type: "string", description: "favorite | clip (\uC0DD\uB7B5=\uC804\uCCB4)" } },
+    params: { kind: { type: "string", description: "favorite | clip (\uC0DD\uB7B5=\uC804\uCCB4)" }, projectId: projectIdParam },
     returns: "{ items, count }",
     handler: async (p) => {
       const kind = p?.kind;
-      const items = store.get().filter((i) => !kind || i.kind === kind);
+      const all = await loadLibrary(data(), scopeFor(p));
+      const items = all.filter((i) => !kind || i.kind === kind);
       return { items, count: items.length };
     }
   });
@@ -46932,11 +47191,12 @@ function registerCommands(ctx, store, app) {
     description: "\uB77C\uC774\uBE0C\uB7EC\uB9AC \uD544\uD130 \u2014 CJK \uC804\uBB38\uAC80\uC0C9(title/inputUrl) + kind \uC885\uB958. \uB2E8\uC77C \uBAA9\uB85D.",
     params: {
       text: { type: "string", description: "\uAC80\uC0C9\uC5B4(\uBE48 \uAC12=\uC804\uCCB4)" },
-      kind: { type: "string", description: "favorite | clip" }
+      kind: { type: "string", description: "favorite | clip" },
+      projectId: projectIdParam
     },
     returns: "{ items, count }",
     handler: async (p) => {
-      let items = await store.search(String(p?.text ?? ""));
+      let items = await searchLibrary(data(), scopeFor(p), String(p?.text ?? ""));
       const kind = p?.kind;
       if (kind) items = items.filter((i) => i.kind === kind);
       return { items, count: items.length };
@@ -46956,14 +47216,23 @@ function registerCommands(ctx, store, app) {
     description: "\uC5F4\uB9B0 \uD50C\uB808\uC774\uC5B4\uC5D0 \uC7AC\uC0DD \uC694\uCCAD(\uC0AC\uC774\uB4DC\uBC14\u2192\uD50C\uB808\uC774\uC5B4). \uD574\uC11D \uACB0\uACFC\uB3C4 \uBC18\uD658. inputUrl \uD544\uC218.",
     params: {
       inputUrl: { type: "string", description: "\uBE44\uB514\uC624 URL/\uACBD\uB85C", required: true },
-      title: { type: "string", description: "\uD45C\uC2DC \uC81C\uBAA9" }
+      title: { type: "string", description: "\uD45C\uC2DC \uC81C\uBAA9" },
+      startSec: { type: "number", description: "\uD074\uB9BD \uC2DC\uC791 \uCD08(\uC788\uC73C\uBA74 \uAD6C\uAC04 \uBC18\uBCF5 \uC7AC\uC0DD)" },
+      endSec: { type: "number", description: "\uD074\uB9BD \uC885\uB8CC \uCD08" },
+      projectId: projectIdParam
     },
     returns: "{ requested, resolved }",
     danger: "inject",
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
-      store.requestPlay({ inputUrl: input, title: p?.title });
+      const hasRange = Number.isFinite(p?.startSec) && Number.isFinite(p?.endSec) && p.endSec > p.startSec;
+      sig(p).requestPlay({
+        inputUrl: input,
+        title: p?.title,
+        startSec: hasRange ? Number(p.startSec) : void 0,
+        endSec: hasRange ? Number(p.endSec) : void 0
+      });
       const resolved = await resolveUrl(input, spawn);
       return { requested: true, resolved };
     }
@@ -46975,7 +47244,8 @@ function registerCommands(ctx, store, app) {
       startSec: { type: "number", description: "\uC2DC\uC791 \uCD08", required: true },
       endSec: { type: "number", description: "\uC885\uB8CC \uCD08", required: true },
       title: { type: "string", description: "\uC81C\uBAA9(\uC0DD\uB7B5 \uC2DC \uC790\uB3D9)" },
-      parentId: { type: "string", description: "\uBD80\uBAA8 \uC990\uACA8\uCC3E\uAE30 id(\uC788\uC73C\uBA74)" }
+      parentId: { type: "string", description: "\uBD80\uBAA8 \uC990\uACA8\uCC3E\uAE30 id(\uC788\uC73C\uBA74)" },
+      projectId: projectIdParam
     },
     returns: "{ id, item }",
     handler: async (p) => {
@@ -46987,8 +47257,8 @@ function registerCommands(ctx, store, app) {
       }
       if (endSec <= startSec) return { ok: false, code: "INVALID_PARAMS", message: "endSec > startSec \uC774\uC5B4\uC57C \uD568" };
       const c = classify(inputUrl);
-      const title = String(p?.title ?? `${c.title} [${fmtTime(startSec)}\u2013${fmtTime(endSec)}]`);
-      const item = await store.add({
+      const title = String(p?.title ?? `${c.title} [${fmtTime(startSec, true)}\u2013${fmtTime(endSec, true)}]`);
+      const item = await addItem(data(), scopeFor(p), {
         kind: "clip",
         title,
         inputUrl,
@@ -47002,11 +47272,62 @@ function registerCommands(ctx, store, app) {
   });
   reg("clip.list", {
     description: "\uD074\uB9BD\uB9CC \uBAA9\uB85D(\uB77C\uC774\uBE0C\uB7EC\uB9AC kind=clip).",
-    params: {},
+    params: { projectId: projectIdParam },
     returns: "{ items, count }",
-    handler: async () => {
-      const items = store.get().filter((i) => i.kind === "clip");
+    handler: async (p) => {
+      const items = (await loadLibrary(data(), scopeFor(p))).filter((i) => i.kind === "clip");
       return { items, count: items.length };
+    }
+  });
+  reg("clip.update", {
+    description: "\uD074\uB9BD \uAD6C\uAC04/\uC81C\uBAA9 \uC218\uC815 \u2014 id \uC758 startSec/endSec/title \uBCC0\uACBD(\uCD08.00 \uC815\uBC00). \uB458 \uB2E4 \uC904 \uB550 end>start \uD544\uC694.",
+    params: {
+      id: { type: "string", description: "\uD074\uB9BD id", required: true },
+      startSec: { type: "number", description: "\uC0C8 \uC2DC\uC791 \uCD08(.00)" },
+      endSec: { type: "number", description: "\uC0C8 \uC885\uB8CC \uCD08(.00)" },
+      title: { type: "string", description: "\uC0C8 \uC81C\uBAA9(\uC0DD\uB7B5 \uC2DC \uC720\uC9C0)" },
+      projectId: projectIdParam
+    },
+    returns: "{ ok, item }",
+    handler: async (p) => {
+      const id = String(p?.id ?? "");
+      if (!id) return { ok: false, code: "INVALID_PARAMS", message: "id \uD544\uC694" };
+      const patch = {};
+      if (Number.isFinite(p?.startSec)) patch.startSec = Number(p.startSec);
+      if (Number.isFinite(p?.endSec)) patch.endSec = Number(p.endSec);
+      if (typeof p?.title === "string") patch.title = p.title;
+      if (patch.startSec != null && patch.endSec != null && patch.endSec <= patch.startSec) {
+        return { ok: false, code: "INVALID_PARAMS", message: "endSec > startSec \uC774\uC5B4\uC57C \uD568" };
+      }
+      const item = await patchItem(data(), scopeFor(p), id, patch);
+      return item ? { ok: true, item } : { ok: false, code: "NOT_FOUND", message: "\uD074\uB9BD \uC5C6\uC74C" };
+    }
+  });
+  reg("player.state", {
+    description: "\uD604\uC7AC \uD50C\uB808\uC774\uC5B4 \uC7AC\uC0DD \uC0C1\uD0DC \u2014 { open, inputUrl, currentTime, duration, paused, clip, loop }. read-only.",
+    params: { projectId: projectIdParam },
+    returns: "{ open, ...PlayerState }",
+    handler: async (p) => {
+      const s = sig(p).getPlayerState();
+      return s ? { open: true, ...s } : { open: false };
+    }
+  });
+  reg("player.control", {
+    description: "\uD50C\uB808\uC774\uC5B4 \uC81C\uC5B4 \u2014 action: play|pause|seek|toggleLoop. seek \uB294 seconds(\uCD08.00) \uD544\uC694. \uC5F4\uB9B0 \uD50C\uB808\uC774\uC5B4\uC5D0 \uC801\uC6A9.",
+    params: {
+      action: { type: "string", description: "play | pause | seek | toggleLoop", required: true },
+      seconds: { type: "number", description: "seek \uB300\uC0C1 \uCD08(.00)" },
+      projectId: projectIdParam
+    },
+    returns: "{ ok }",
+    danger: "inject",
+    handler: async (p) => {
+      const action = String(p?.action ?? "");
+      if (action !== "play" && action !== "pause" && action !== "seek" && action !== "toggleLoop") {
+        return { ok: false, code: "INVALID_PARAMS", message: "action: play|pause|seek|toggleLoop" };
+      }
+      sig(p).requestControl({ action, seconds: Number.isFinite(p?.seconds) ? Number(p.seconds) : void 0 });
+      return { ok: true };
     }
   });
   reg("download", {
@@ -47076,7 +47397,7 @@ function registerCommands(ctx, store, app) {
 
 // src/plugin-entry.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-var ErrBoundary = class extends import_react3.Component {
+var ErrBoundary = class extends import_react4.Component {
   state = { err: null };
   static getDerivedStateFromError(err) {
     return { err };
@@ -47096,9 +47417,19 @@ var ErrBoundary = class extends import_react3.Component {
 };
 var mounts = /* @__PURE__ */ new WeakMap();
 var pluginApp = null;
-var pluginStore = null;
-function mountView(container, viewId) {
+var signals = /* @__PURE__ */ new Map();
+function getSignal(projectId) {
+  let s = signals.get(projectId);
+  if (!s) {
+    s = createSignal(projectId);
+    signals.set(projectId, s);
+  }
+  return s;
+}
+function mountView(container, viewId, ctx) {
   unmountView(container);
+  const scope = String(ctx?.projectId ?? "default");
+  const signal = getSignal(scope);
   container.style.position = "relative";
   const shadow = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   shadow.replaceChildren();
@@ -47112,7 +47443,7 @@ function mountView(container, viewId) {
   try {
     const root = (0, import_client.createRoot)(host);
     root.render(
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ErrBoundary, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(App, { viewId, app: pluginApp, store: pluginStore }) })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ErrBoundary, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(App, { viewId, app: pluginApp, scope, signal }) })
     );
     mounts.set(container, { root });
   } catch (e) {
@@ -47132,15 +47463,11 @@ var plugin_entry_default = {
   activate(ctx) {
     const app = ctx.app;
     pluginApp = app;
-    const store = createStore(app);
-    pluginStore = store;
-    void store.init().catch((e) => console.error("[playbox] store init \uC2E4\uD328:", e));
-    ctx.subscriptions.push({ dispose: () => store.dispose() });
     for (const viewId of ["library", "player"]) {
       ctx.subscriptions.push(
         app.ui.registerView(viewId, {
-          mount(container) {
-            mountView(container, viewId);
+          mount(container, viewCtx) {
+            mountView(container, viewId, viewCtx);
           },
           unmount(container) {
             unmountView(container);
@@ -47155,12 +47482,11 @@ var plugin_entry_default = {
           handler: async () => ({ ok: true, plugin: "soksak-plugin-media-player", version: "0.1.0", phase: "M1" })
         })
       );
-      registerCommands(ctx, store, app);
+      registerCommands(ctx, getSignal, app);
     }
   },
   deactivate() {
-    pluginStore?.dispose();
-    pluginStore = null;
+    signals.clear();
   }
 };
 export {

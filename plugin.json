@@ -106,9 +106,13 @@
       { "name": "play", "title": { "ko": "재생", "en": "Play" }, "danger": "inject" },
       { "name": "clip.add", "title": { "ko": "클립 추가", "en": "Add clip" } },
       { "name": "clip.list", "title": { "ko": "클립 목록", "en": "List clips" } },
+      { "name": "clip.update", "title": { "ko": "클립 수정", "en": "Update clip" } },
+      { "name": "player.state", "title": { "ko": "재생 상태", "en": "Player state" } },
+      { "name": "player.control", "title": { "ko": "재생 제어", "en": "Player control" }, "danger": "inject" },
       { "name": "download", "title": { "ko": "다운로드", "en": "Download" }, "danger": "inject" },
       { "name": "doctor", "title": { "ko": "의존성 점검", "en": "Doctor" } },
-      { "name": "setup", "title": { "ko": "의존성 설치", "en": "Setup deps" }, "danger": "inject" }
+      { "name": "setup", "title": { "ko": "의존성 설치", "en": "Setup deps" }, "danger": "inject" },
+      { "name": "debug", "title": { "ko": "인스턴스 진단", "en": "Debug instance" } }
     ],
     "programs": [
       {
@@ -131,6 +135,9 @@
       { "id": "open-file", "description": { "en": "Open file picker", "ko": "파일 선택 열기" } },
       { "id": "dropzone", "description": { "en": "Drag-drop target for video files", "ko": "동영상 파일 드롭 영역" } },
       { "id": "video", "description": { "en": "The video element", "ko": "비디오 요소" } },
+      { "id": "playstate", "description": { "en": "Live playback state (currentTime centisec/paused/readyState)", "ko": "실재생 상태(currentTime 센티초/일시정지/readyState)" } },
+      { "id": "clipstate", "description": { "en": "Clip segment/loop state (start centisec/end centisec/loop)", "ko": "클립 구간/반복 상태(시작 센티초/끝 센티초/반복)" } },
+      { "id": "loop", "description": { "en": "Toggle clip segment repeat", "ko": "클립 구간 반복 토글" } },
       { "id": "frame", "description": { "en": "The embedded player iframe", "ko": "임베드 플레이어" } },
       { "id": "clip-start", "description": { "en": "Mark clip start", "ko": "클립 시작 표시" } },
       { "id": "clip-end", "description": { "en": "Mark clip end and save", "ko": "클립 끝 표시·저장" } },
@@ -144,7 +151,16 @@
       { "id": "lib-kind", "description": { "en": "Library kind filter (all/favorite/clip)", "ko": "라이브러리 종류 필터" } },
       { "id": "list", "description": { "en": "Library list container", "ko": "라이브러리 목록" } },
       { "id": "item", "description": { "en": "Library row (item/<id>)", "ko": "라이브러리 행" } },
-      { "id": "remove", "description": { "en": "Remove row button (remove/<id>)", "ko": "행 삭제 버튼" } }
+      { "id": "edit", "description": { "en": "Edit clip start/end button (edit/<id>)", "ko": "클립 시작/종료 수정 버튼" } },
+      { "id": "edit-panel", "description": { "en": "Inline clip edit panel (edit-panel/<id>)", "ko": "클립 인라인 편집 패널" } },
+      { "id": "clip-edit-start", "description": { "en": "Clip edit start input (sec.cs)", "ko": "클립 편집 시작 입력(초.00)" } },
+      { "id": "clip-edit-end", "description": { "en": "Clip edit end input (sec.cs)", "ko": "클립 편집 종료 입력(초.00)" } },
+      { "id": "clip-edit-save", "description": { "en": "Save clip edit", "ko": "클립 편집 저장" } },
+      { "id": "clip-edit-cancel", "description": { "en": "Cancel clip edit", "ko": "클립 편집 취소" } },
+      { "id": "lib-flash", "description": { "en": "Library transient status message", "ko": "라이브러리 상태 메시지" } },
+      { "id": "dlstate", "description": { "en": "Download result state (idle/busy/ok/fail)", "ko": "다운로드 결과 상태" } },
+      { "id": "remove", "description": { "en": "Remove row button (remove/<id>)", "ko": "행 삭제 버튼" } },
+      { "id": "debug", "description": { "en": "Instance/scope diagnostic (instanceId|scope|count)", "ko": "인스턴스/scope 진단" } }
     ]
   }
 }
