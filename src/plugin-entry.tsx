@@ -5,7 +5,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import App from "@/view/App";
 import { GLOBAL_CSS } from "@/styles";
-import { createStore, type LibraryStore } from "@/store";
+import { createSignal, type PlayerSignal } from "@/signal";
 import { registerCommands } from "@/commands";
 
 class ErrBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {
@@ -29,11 +29,24 @@ class ErrBoundary extends Component<{ children: ReactNode }, { err: Error | null
 }
 
 const mounts = new WeakMap<HTMLElement, { root: Root }>();
-let pluginApp: unknown = null;
-let pluginStore: LibraryStore | null = null;
+let pluginApp: any = null;
+// projectId 별 시그널 채널(재생/제어/상태) — 같은 프로젝트의 뷰들이 공유, 다른 프로젝트는 격리.
+// 데이터 아님(데이터는 app.data 직접, 뷰는 useLibrary 로 구독). 채널은 메모리 변수라 init/watch/레이스 없음.
+const signals = new Map<string, PlayerSignal>();
 
-function mountView(container: HTMLElement, viewId: string) {
+function getSignal(projectId: string): PlayerSignal {
+  let s = signals.get(projectId);
+  if (!s) {
+    s = createSignal(projectId);
+    signals.set(projectId, s);
+  }
+  return s;
+}
+
+function mountView(container: HTMLElement, viewId: string, ctx: { projectId?: string } | undefined) {
   unmountView(container);
+  const scope = String(ctx?.projectId ?? "default");
+  const signal = getSignal(scope);
   container.style.position = "relative";
   // Shadow DOM 격리 — soksak chrome 전역 스타일 오염 방지. attachShadow 는 요소당 1회.
   const shadow = container.shadowRoot ?? container.attachShadow({ mode: "open" });
@@ -52,7 +65,7 @@ function mountView(container: HTMLElement, viewId: string) {
     const root = createRoot(host);
     root.render(
       <ErrBoundary>
-        <App viewId={viewId} app={pluginApp as never} store={pluginStore as never} />
+        <App viewId={viewId} app={pluginApp as never} scope={scope} signal={signal as never} />
       </ErrBoundary>,
     );
     mounts.set(container, { root });
@@ -76,17 +89,12 @@ export default {
     const app = ctx.app;
     pluginApp = app;
 
-    // 단일 진실 스토어 — app.data 하이드레이트 + cross-window watch.
-    const store = createStore(app);
-    pluginStore = store;
-    void store.init().catch((e: unknown) => console.error("[playbox] store init 실패:", e));
-    ctx.subscriptions.push({ dispose: () => store.dispose() });
-
+    // 뷰는 자기 ctx.projectId 의 시그널 채널 + scope 로 마운트 — 데이터는 app.data 직접 구독.
     for (const viewId of ["library", "player"]) {
       ctx.subscriptions.push(
         app.ui.registerView(viewId, {
-          mount(container: HTMLElement) {
-            mountView(container, viewId);
+          mount(container: HTMLElement, viewCtx: { projectId?: string }) {
+            mountView(container, viewId, viewCtx);
           },
           unmount(container: HTMLElement) {
             unmountView(container);
@@ -102,11 +110,11 @@ export default {
           handler: async () => ({ ok: true, plugin: "soksak-plugin-media-player", version: "0.0.1", phase: "M1" }),
         }),
       );
-      registerCommands(ctx, store, app);
+      // 데이터 커맨드는 app.data 직접(data.ts), 시그널 커맨드만 projectId 채널(getSignal) 사용.
+      registerCommands(ctx, getSignal, app);
     }
   },
   deactivate() {
-    pluginStore?.dispose();
-    pluginStore = null;
+    signals.clear();
   },
 };

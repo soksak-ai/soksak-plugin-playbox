@@ -3,8 +3,10 @@
 import { resolveUrl, type SpawnFn } from "@/resolve";
 import { makeSpawn } from "@/spawn";
 import { runDownload } from "@/download";
-import { classify, fmtTime } from "@/util";
-import type { LibraryStore } from "@/store";
+import { classify, fmtTime, downloadDir } from "@/util";
+import type { PlayerSignal } from "@/signal";
+import type { LibraryItem } from "@/types";
+import { type DataApi, addItem, deleteLibraryItem, loadLibrary, patchItem, searchLibrary } from "@/data";
 
 function probe(spawn: SpawnFn, cmd: string, args: string[]): Promise<{ found: boolean; version?: string }> {
   return spawn(cmd, args)
@@ -21,23 +23,48 @@ function platformInstall(tool: string): { cmd: string; args: string[] } | null {
   return null;
 }
 
-export function registerCommands(ctx: any, store: LibraryStore, app: any): void {
+export function registerCommands(
+  ctx: any,
+  getSignal: (projectId: string) => PlayerSignal,
+  app: any,
+): void {
   const spawn = makeSpawn(app);
   const reg = (name: string, spec: Record<string, unknown>) =>
     ctx.subscriptions.push(app.commands.register(name, spec));
+
+  // 데이터 커맨드는 app.data(단일 진실)를 data.ts 로 직접 읽고 쓴다 — 뷰 미러 비의존이라 "생성 직후 빈
+  // 목록" 레이스가 구조적으로 없다(항상 최신). 시그널 커맨드(play/player.*)만 getStore 의 뷰 간 채널을 쓴다.
+  // projectId 파라미터(생략=활성 프로젝트)로 scope 를 호출 시점에 1회 결정론적으로 해소.
+  const scopeFor = (p?: { projectId?: unknown }): string =>
+    String(p?.projectId ?? app.project?.current?.()?.id ?? "default");
+  const data = (): DataApi => app.data as DataApi;
+  const sig = (p?: { projectId?: unknown }): PlayerSignal => getSignal(scopeFor(p)); // 뷰 간 시그널 채널
+  const projectIdParam = { type: "string", description: "프로젝트 id(생략=활성 프로젝트)" };
+
+  // 진단 — scope 의 app.data 항목수(직접) + 시그널 store instanceId. 뷰 debug 노드와 대조(멱등 CLI 검증).
+  reg("debug", {
+    description: "인스턴스 진단 — { instanceId, scope, count, downloadDir }. 뷰 debug 노드와 대조.",
+    params: { projectId: projectIdParam },
+    returns: "{ instanceId, scope, count, downloadDir }",
+    handler: async (p: any) => {
+      const items = await loadLibrary(data(), scopeFor(p));
+      return { instanceId: sig(p).id(), scope: scopeFor(p), count: items.length, downloadDir: downloadDir(app) };
+    },
+  });
 
   reg("favorite.add", {
     description: "URL 을 즐겨찾기로 라이브러리에 추가(해석은 재생 시). inputUrl 필수.",
     params: {
       inputUrl: { type: "string", description: "비디오 URL 또는 파일 경로", required: true },
       title: { type: "string", description: "표시 제목(생략 시 자동)" },
+      projectId: projectIdParam,
     },
     returns: "{ id, item }",
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
       const c = classify(input);
-      const item = await store.add({
+      const item = await addItem(data(), scopeFor(p), {
         kind: "favorite",
         title: String(p?.title ?? c.title),
         inputUrl: input,
@@ -49,19 +76,20 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
 
   reg("favorite.remove", {
     description: "라이브러리 항목 삭제(즐겨찾기/클립 공통). id 필수.",
-    params: { id: { type: "string", description: "항목 id", required: true } },
+    params: { id: { type: "string", description: "항목 id", required: true }, projectId: projectIdParam },
     returns: "{ removed }",
     danger: "destructive",
-    handler: async (p: any) => ({ removed: await store.remove(String(p?.id ?? "")) }),
+    handler: async (p: any) => ({ removed: await deleteLibraryItem(data(), scopeFor(p), String(p?.id ?? "")) }),
   });
 
   reg("library.list", {
     description: "라이브러리 목록(즐겨찾기+클립). kind 로 좁힌다(favorite|clip).",
-    params: { kind: { type: "string", description: "favorite | clip (생략=전체)" } },
+    params: { kind: { type: "string", description: "favorite | clip (생략=전체)" }, projectId: projectIdParam },
     returns: "{ items, count }",
     handler: async (p: any) => {
       const kind = p?.kind as string | undefined;
-      const items = store.get().filter((i) => !kind || i.kind === kind);
+      const all = await loadLibrary(data(), scopeFor(p));
+      const items = all.filter((i) => !kind || i.kind === kind);
       return { items, count: items.length };
     },
   });
@@ -71,10 +99,11 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
     params: {
       text: { type: "string", description: "검색어(빈 값=전체)" },
       kind: { type: "string", description: "favorite | clip" },
+      projectId: projectIdParam,
     },
     returns: "{ items, count }",
     handler: async (p: any) => {
-      let items = await store.search(String(p?.text ?? ""));
+      let items = await searchLibrary(data(), scopeFor(p), String(p?.text ?? ""));
       const kind = p?.kind as string | undefined;
       if (kind) items = items.filter((i) => i.kind === kind);
       return { items, count: items.length };
@@ -97,13 +126,22 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
     params: {
       inputUrl: { type: "string", description: "비디오 URL/경로", required: true },
       title: { type: "string", description: "표시 제목" },
+      startSec: { type: "number", description: "클립 시작 초(있으면 구간 반복 재생)" },
+      endSec: { type: "number", description: "클립 종료 초" },
+      projectId: projectIdParam,
     },
     returns: "{ requested, resolved }",
     danger: "inject",
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
-      store.requestPlay({ inputUrl: input, title: p?.title as string | undefined });
+      const hasRange = Number.isFinite(p?.startSec) && Number.isFinite(p?.endSec) && p.endSec > p.startSec;
+      sig(p).requestPlay({
+        inputUrl: input,
+        title: p?.title as string | undefined,
+        startSec: hasRange ? Number(p.startSec) : undefined,
+        endSec: hasRange ? Number(p.endSec) : undefined,
+      });
       const resolved = await resolveUrl(input, spawn);
       return { requested: true, resolved };
     },
@@ -117,6 +155,7 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
       endSec: { type: "number", description: "종료 초", required: true },
       title: { type: "string", description: "제목(생략 시 자동)" },
       parentId: { type: "string", description: "부모 즐겨찾기 id(있으면)" },
+      projectId: projectIdParam,
     },
     returns: "{ id, item }",
     handler: async (p: any) => {
@@ -128,8 +167,8 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
       }
       if (endSec <= startSec) return { ok: false, code: "INVALID_PARAMS", message: "endSec > startSec 이어야 함" };
       const c = classify(inputUrl);
-      const title = String(p?.title ?? `${c.title} [${fmtTime(startSec)}–${fmtTime(endSec)}]`);
-      const item = await store.add({
+      const title = String(p?.title ?? `${c.title} [${fmtTime(startSec, true)}–${fmtTime(endSec, true)}]`);
+      const item = await addItem(data(), scopeFor(p), {
         kind: "clip",
         title,
         inputUrl,
@@ -144,11 +183,65 @@ export function registerCommands(ctx: any, store: LibraryStore, app: any): void 
 
   reg("clip.list", {
     description: "클립만 목록(라이브러리 kind=clip).",
-    params: {},
+    params: { projectId: projectIdParam },
     returns: "{ items, count }",
-    handler: async () => {
-      const items = store.get().filter((i) => i.kind === "clip");
+    handler: async (p: any) => {
+      const items = (await loadLibrary(data(), scopeFor(p))).filter((i) => i.kind === "clip");
       return { items, count: items.length };
+    },
+  });
+
+  reg("clip.update", {
+    description: "클립 구간/제목 수정 — id 의 startSec/endSec/title 변경(초.00 정밀). 둘 다 줄 땐 end>start 필요.",
+    params: {
+      id: { type: "string", description: "클립 id", required: true },
+      startSec: { type: "number", description: "새 시작 초(.00)" },
+      endSec: { type: "number", description: "새 종료 초(.00)" },
+      title: { type: "string", description: "새 제목(생략 시 유지)" },
+      projectId: projectIdParam,
+    },
+    returns: "{ ok, item }",
+    handler: async (p: any) => {
+      const id = String(p?.id ?? "");
+      if (!id) return { ok: false, code: "INVALID_PARAMS", message: "id 필요" };
+      const patch: Partial<LibraryItem> = {};
+      if (Number.isFinite(p?.startSec)) patch.startSec = Number(p.startSec);
+      if (Number.isFinite(p?.endSec)) patch.endSec = Number(p.endSec);
+      if (typeof p?.title === "string") patch.title = p.title;
+      if (patch.startSec != null && patch.endSec != null && patch.endSec <= patch.startSec) {
+        return { ok: false, code: "INVALID_PARAMS", message: "endSec > startSec 이어야 함" };
+      }
+      const item = await patchItem(data(), scopeFor(p), id, patch);
+      return item ? { ok: true, item } : { ok: false, code: "NOT_FOUND", message: "클립 없음" };
+    },
+  });
+
+  reg("player.state", {
+    description: "현재 플레이어 재생 상태 — { open, inputUrl, currentTime, duration, paused, clip, loop }. read-only.",
+    params: { projectId: projectIdParam },
+    returns: "{ open, ...PlayerState }",
+    handler: async (p: any) => {
+      const s = sig(p).getPlayerState();
+      return s ? { open: true, ...s } : { open: false };
+    },
+  });
+
+  reg("player.control", {
+    description: "플레이어 제어 — action: play|pause|seek|toggleLoop. seek 는 seconds(초.00) 필요. 열린 플레이어에 적용.",
+    params: {
+      action: { type: "string", description: "play | pause | seek | toggleLoop", required: true },
+      seconds: { type: "number", description: "seek 대상 초(.00)" },
+      projectId: projectIdParam,
+    },
+    returns: "{ ok }",
+    danger: "inject",
+    handler: async (p: any) => {
+      const action = String(p?.action ?? "");
+      if (action !== "play" && action !== "pause" && action !== "seek" && action !== "toggleLoop") {
+        return { ok: false, code: "INVALID_PARAMS", message: "action: play|pause|seek|toggleLoop" };
+      }
+      sig(p).requestControl({ action, seconds: Number.isFinite(p?.seconds) ? Number(p.seconds) : undefined });
+      return { ok: true };
     },
   });
 

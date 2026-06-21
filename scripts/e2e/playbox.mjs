@@ -10,10 +10,10 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const PLUGIN_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
-const PLUGIN_ID = "soksak-playbox";
+const PLUGIN_ID = "soksak-plugin-media-player";
 const P = `plugin.${PLUGIN_ID}.`;
 const SOCKET = process.env.SOKSAK_SOCKET || path.join(os.homedir(), ".soksak", "com.soksak.dev.sock");
-const MARKER = "soksak-e2e-playbox"; // 고정 — 크래시 잔재도 탐지·청소 가능(랜덤 금지).
+const MARKER = "soksak-e2e-media-player"; // 고정 — 크래시 잔재도 탐지·청소 가능(랜덤 금지).
 
 let sock;
 let rbuf = "";
@@ -51,7 +51,7 @@ function connect() {
 
 // dev 프론트엔드의 소켓 포워딩 latency 는 부하 시 수 초~10초+로 가변(debug 빌드 + vite dev).
 // 타임아웃은 측정 worst-case 위로 넉넉히 — assertion 은 그대로(약화 아님, 인프라 관용).
-function rpc(method, params = {}, timeoutMs = 30000) {
+function rpc(method, params = {}, timeoutMs = 30000, window = undefined) {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -63,7 +63,10 @@ function rpc(method, params = {}, timeoutMs = 30000) {
       resolve(msg);
     });
     // 봉투 timeoutMs 도 전달 — 서버 rx.recv_timeout 가 이 값을 쓴다(긴 작업=download 가 10s 기본에 안 잘리게).
-    sock.write(JSON.stringify({ id, method, params, timeoutMs: Math.max(5000, timeoutMs - 2000) }) + "\n");
+    // window: 특정 창 label 로 라우팅(멀티윈도우 검증). 생략 시 활성 창(ipc.rs window: Option).
+    const env = { id, method, params, timeoutMs: Math.max(5000, timeoutMs - 2000) };
+    if (window) env.window = window;
+    sock.write(JSON.stringify(env) + "\n");
   });
 }
 
@@ -200,6 +203,194 @@ async function main() {
   const dlBad = val(await rpc(P + "download", { inputUrl: "ftp://host/a.mp4", outPath: dlOut }, 20000));
   ok(dlBad.ok === false && dlBad.code === "NO_STREAM", "download 미지원 입력 → NO_STREAM", dlBad);
   try { fs.unlinkSync(dlOut); } catch {}
+
+  // ── G. 프로젝트별 scope 격리 (결정론적, debug 커맨드 + projectId) ──────────────
+  // 같은 프로젝트의 뷰·커맨드는 한 store, 다른 프로젝트는 격리. 활성 프로젝트와 무관하게 projectId 로
+  // 결정(이벤트 플립·"활성 프로젝트 가변" 아님). 멀티윈도우 같은 프로젝트는 app.data.watch 가 동기
+  // (각 창의 그 프로젝트 store 가 같은 scope 를 watch — 본 격리가 그 전제). 별도 프로젝트는 app.data scope
+  // 파티션이라 실존 프로젝트가 없어도 격리만 결정론적으로 검증된다.
+  const PROJ_B = "e2e-scope-b"; // 고정(멱등). 실존 프로젝트 불요 — scope 파티션 격리 확인용.
+  // 잔재 선청소(크래시 대비).
+  for (const it of (val(await rpc(P + "clip.list", { projectId: PROJ_B })).items || []).filter((i) => String(i.inputUrl).includes(MARKER))) {
+    await rpc(P + "favorite.remove", { id: it.id, projectId: PROJ_B });
+  }
+  const dbgA0 = val(await rpc(P + "debug"));
+  const dbgB0 = val(await rpc(P + "debug", { projectId: PROJ_B }));
+  ok(dbgB0.scope === PROJ_B && dbgA0.scope !== PROJ_B, "debug: 프로젝트별 scope 분리", { a: dbgA0.scope, b: dbgB0.scope });
+  ok(dbgA0.instanceId !== dbgB0.instanceId, "프로젝트별 store 인스턴스 분리", { a: dbgA0.instanceId, b: dbgB0.instanceId });
+  const aCount0 = dbgA0.count;
+  const bCount0 = dbgB0.count;
+  const addB = val(await rpc(P + "clip.add", { projectId: PROJ_B, inputUrl: `https://example.com/${MARKER}/scope.m3u8`, startSec: 1, endSec: 4, title: `${MARKER} scope` }));
+  ok(addB.item && addB.item.kind === "clip", "다른 프로젝트(B)에 clip.add", addB.item);
+  ok(val(await rpc(P + "debug", { projectId: PROJ_B })).count === bCount0 + 1, "B count +1", { before: bCount0 });
+  ok(val(await rpc(P + "debug")).count === aCount0, "A count 불변(격리)", { before: aCount0 });
+  ok(val(await rpc(P + "clip.list", { projectId: PROJ_B })).items.some((i) => i.id === addB.item.id), "clip.list(B) 에 B 클립", null);
+  ok(!val(await rpc(P + "clip.list")).items.some((i) => i.id === addB.item.id), "clip.list(A) 에 B 클립 없음(격리)", null);
+  // clip.update — 구간을 초.00 정밀로 수정(CLI/MCP 경로).
+  const upd = val(await rpc(P + "clip.update", { projectId: PROJ_B, id: addB.item.id, startSec: 2.25, endSec: 3.5 }));
+  ok(upd.ok === true && Math.abs(upd.item.startSec - 2.25) < 0.01 && Math.abs(upd.item.endSec - 3.5) < 0.01, "clip.update — 구간 .00 수정", upd.item ? { s: upd.item.startSec, e: upd.item.endSec } : upd);
+  ok(val(await rpc(P + "favorite.remove", { id: addB.item.id, projectId: PROJ_B })).removed === true, "B 클립 제거", null);
+  ok(val(await rpc(P + "debug", { projectId: PROJ_B })).count === bCount0, "B count 원복(멱등)", { baseline: bCount0 });
+
+  // ── 멀티윈도우 같은 프로젝트 동기 (라이브 검증됨 — 자동단언 제외) ──────────────
+  // 같은 프로젝트를 두 창에 펼치면 한 창의 변경이 app.data.watch 로 다른 창 store 에 동기된다. 각 창은 그
+  // 프로젝트의 별도 store 인스턴스지만 같은 scope 를 watch(위 G 의 scope 격리가 그 전제). rpc 4번째 인자로
+  // window 타깃 가능(ipc.rs window: Option). 자동 E2E 에선 (1) 백그라운드 새 창이 occlusion 으로 JS
+  // throttle 돼 watch 콜백이 불가측 지연, (2) window.new/focus 가 다른 섹션 라우팅을 교란해 불안정 →
+  // 하드 단언 제외. 라이브 재현(검증 완료):
+  //   sok window.new                                   # 같은 활성 프로젝트로 새 창
+  //   SOKSAK_WINDOW=<win> sok plugin.<id>.view.open '{"view":"<id>.library"}'
+  //   sok window.focus  (또는 새 창 보이게)            # occlusion throttle 해제
+  //   sok plugin.<id>.clip.add '{...}'                 # 한 창에서
+  //   SOKSAK_WINDOW=<win> sok ui.tree                  # 다른 창 library debug 노드 count +1 (watch 동기)
+
+  // ── I. 실제 재생 검증 (DOM playstate 노드 + 재생 중 클립, 가짜 URL 아님) ────────
+  // 실 HLS 스트림을 열어 플레이어 playstate 노드(currentTime)가 진행하는지 폴링해 "진짜 재생 중"을 단언.
+  // 이어서 재생 중 clip-start/clip-end 를 ui.input.click 으로 눌러 실재생 시점으로 클립이 저장(end>start>=0)
+  // 되는지 — 재생→클립→라이브러리 전 경로를 실영상으로 검증(인텐트/가짜URL 아님).
+  await rpc("window.focus").catch(() => {}); // occlusion 해제(단일 창) — 비디오 throttle 방지
+  await sleep(500);
+  await rpc("plugin.view.open", { view: `${PLUGIN_ID}.player`, placement: "content" }).catch(() => {});
+  await rpc("plugin.view.open", { view: `${PLUGIN_ID}.library` }).catch(() => {});
+  await sleep(800);
+  const REALHLS = "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8";
+  await rpc(P + "play", { inputUrl: REALHLS, title: "E2E 실재생" });
+  const treeStr = async () => JSON.stringify(await rpc("ui.tree"));
+  const findNode = async (suffix) => {
+    const m = (await treeStr()).match(new RegExp(`win[^"]*${PLUGIN_ID}\\.player\\/node\\/${suffix}`));
+    return m ? m[0] : null;
+  };
+  const playT = async () => {
+    const m = (await treeStr()).match(/node\/playstate\/(\d+)\/(\d)\/(\d)/);
+    return m ? { cs: parseInt(m[1], 10), paused: m[2] === "1", ready: parseInt(m[3], 10) } : null;
+  };
+  let pt = null;
+  for (let i = 0; i < 25 && !(pt && pt.cs > 50 && !pt.paused); i++) {
+    await sleep(800);
+    pt = await playT();
+  }
+  ok(pt != null, "playstate 노드 존재(플레이어 열림)", pt);
+  ok(pt != null && pt.cs > 50 && !pt.paused, "실 스트림 재생 중 — currentTime 진행(>0.5s, 비일시정지)", pt);
+  const startAddr = await findNode("clip-start");
+  ok(startAddr != null, "clip-start 노드(재생 컨트롤) 발견", startAddr);
+  if (startAddr && pt && pt.cs > 50) {
+    const before = val(await rpc(P + "clip.list")).count;
+    await rpc("ui.input.click", { address: startAddr }); // 재생 중 시작 마킹(실 currentTime)
+    await sleep(1500); // 구간 생기게 진행
+    const endAddr = await findNode("clip-end");
+    if (endAddr) await rpc("ui.input.click", { address: endAddr }); // 끝 마킹 → 저장
+    await sleep(800);
+    const after = val(await rpc(P + "clip.list"));
+    ok(after.count === before + 1, "재생 중 [ ] 클립 → 라이브러리 +1", { before, after: after.count });
+    const nc = after.items[0]; // 최신
+    ok(nc && nc.kind === "clip" && nc.endSec > nc.startSec && nc.startSec >= 0, "클립 구간이 실재생 시점(end>start>=0)", nc ? { s: nc.startSec, e: nc.endSec, url: nc.inputUrl } : null);
+
+    // ── 저장한 클립을 라이브러리에서 클릭 → 구간 seek + 반복(되감김) + 반복 아이콘 검증 ──
+    if (nc && after.count === before + 1) {
+      const clipState = async () => {
+        const m = (await treeStr()).match(/node\/clipstate\/(-?\d+)\/(-?\d+)\/(\d)/);
+        return m ? { start: parseInt(m[1], 10) / 100, end: parseInt(m[2], 10) / 100, loop: parseInt(m[3], 10) } : null;
+      };
+      const findItem = async (id) => {
+        const m = (await treeStr()).match(new RegExp(`win[^"]*${PLUGIN_ID}\\.library\\/node\\/item\\/${id}`));
+        return m ? m[0] : null;
+      };
+      const addr = await findItem(nc.id);
+      ok(addr != null, "라이브러리에 클립 항목 노드(item/<id>)", addr);
+      if (addr) {
+        await rpc("ui.input.click", { address: addr }); // 클립 클릭 → 구간 재생 인텐트
+        let cs = null;
+        for (let i = 0; i < 15 && !(cs && cs.loop === 1 && cs.end > cs.start); i++) {
+          await sleep(700);
+          cs = await clipState();
+        }
+        ok(cs != null && Math.abs(cs.start - nc.startSec) < 0.6 && Math.abs(cs.end - nc.endSec) < 0.6 && cs.loop === 1, "클립 클릭 → 구간 로드 + 반복 ON", cs);
+        ok((await findNode("loop")) != null, "반복 토글 아이콘 제공", null);
+        // 구간 반복: 폴링하며 currentTime 이 구간 내 + 되감김(end→start) 감지 → 진짜 루프.
+        let prev = -1;
+        let wrapped = false;
+        let inRange = false;
+        for (let i = 0; i < 14; i++) {
+          await sleep(600);
+          const p = await playT();
+          if (!p) continue;
+          const t = p.cs / 100;
+          if (cs && t >= cs.start - 0.4 && t <= cs.end + 0.7) inRange = true;
+          if (prev >= 0 && t < prev - 0.3) wrapped = true;
+          prev = t;
+        }
+        ok(inRange, "재생 위치가 클립 구간 내(처음부터가 아니라 seek 됨)", { end: cs && cs.end, prev });
+        ok(wrapped, "구간 반복 — currentTime 되감김 감지(루프 동작)", { end: cs && cs.end });
+
+        // player.state / player.control — CLI/MCP 가 재생 상태 read + 제어(원칙: 모든 것 command).
+        const pst = val(await rpc(P + "player.state"));
+        ok(pst && pst.open === true && pst.clip, "player.state — 재생 상태 read(open/clip)", pst ? { open: pst.open, loop: pst.loop, t: pst.currentTime } : pst);
+        await rpc(P + "player.control", { action: "pause" });
+        await sleep(900);
+        const pPause = await playT();
+        ok(pPause != null && pPause.paused, "player.control pause → 일시정지", pPause);
+        await rpc(P + "player.control", { action: "play" });
+        await sleep(900);
+        const pPlay = await playT();
+        ok(pPlay != null && !pPlay.paused, "player.control play → 재개", pPlay);
+        const lBefore = (await clipState())?.loop;
+        await rpc(P + "player.control", { action: "toggleLoop" });
+        await sleep(700);
+        const lAfter = (await clipState())?.loop;
+        ok(lBefore != null && lAfter != null && lBefore !== lAfter, "player.control toggleLoop → 반복 토글", { before: lBefore, after: lAfter });
+        await rpc(P + "player.control", { action: "toggleLoop" }); // 원복
+      }
+      await rpc(P + "favorite.remove", { id: nc.id }); // 정리
+    }
+  }
+  const closeAddr = await findNode("close");
+  if (closeAddr) await rpc("ui.input.click", { address: closeAddr }).catch(() => {}); // 미디어 닫기(잔재 0)
+
+  // ── J. 다운로드 버튼(UI) — runDownload 직접(커맨드 우회). "알 수 없는 명령" 회귀 방지 + 기본 폴더. ──
+  // 자기완결: 실 클립 추가 → 라이브러리 다운로드 버튼 클릭 → dlstate ok + 기본 폴더({프로젝트}/playbox/clip)
+  // 에 파일 생성 확인 → 파일·클립 정리. 짧은 구간(1–3s)이라 ffmpeg 빠름.
+  {
+    const dlDir = String(val(await rpc(P + "debug")).downloadDir || "");
+    const dlClip = val(await rpc(P + "clip.add", { inputUrl: REALHLS, startSec: 1, endSec: 3, title: `${MARKER} dl` }));
+    await rpc("plugin.view.open", { view: `${PLUGIN_ID}.library` }).catch(() => {});
+    await rpc("window.focus").catch(() => {}); // 노드 찾기 ui.tree 안정화(occlusion 해제)
+    await sleep(900);
+    const before = (() => {
+      try {
+        return fs.readdirSync(dlDir);
+      } catch {
+        return [];
+      }
+    })();
+    const dlMatch = (await treeStr()).match(new RegExp(`win[^"]*${PLUGIN_ID}\\.library\\/node\\/download\\/${dlClip.item.id}`));
+    ok(dlMatch != null, "라이브러리 클립 다운로드 버튼 노드", dlMatch ? dlMatch[0] : null);
+    if (dlMatch) {
+      await rpc("ui.input.click", { address: dlMatch[0] });
+      // 실제 산출물(파일)을 fs 로 폴링 — 로컬이라 webview occlusion throttle 무관. dlstate 노드는 DOM
+      // 표면(인터랙티브용)이지만 ffmpeg 중 ui.tree 폴링은 불안정하므로 E2E 는 파일 생성을 본다.
+      const freshNow = () => {
+        try {
+          return fs.readdirSync(dlDir).filter((f) => !before.includes(f));
+        } catch {
+          return [];
+        }
+      };
+      let fresh = [];
+      for (let i = 0; i < 30 && fresh.length === 0; i++) {
+        await sleep(1000);
+        fresh = freshNow();
+      }
+      ok(fresh.length >= 1, "다운로드 버튼 → 기본 폴더 {프로젝트}/playbox/clip 에 파일 생성(runDownload 직접, '알 수 없는 명령' 아님)", { dir: dlDir, fresh });
+      for (const f of fresh) {
+        try {
+          fs.unlinkSync(path.join(dlDir, f));
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
+    await rpc(P + "favorite.remove", { id: dlClip.item.id }); // 클립 정리
+  }
 
   // ── 청소 + 멱등 검증 ────────────────────────────────────────────────────────
   const rmFav = val(await rpc(P + "favorite.remove", { id: favId }));
