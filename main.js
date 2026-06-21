@@ -13312,7 +13312,11 @@ async function proxiedUrl(app, r, opts) {
 function buildFfmpegArgs(src, outPath, startSec, endSec) {
   const a = ["-y"];
   const clip = typeof startSec === "number" && typeof endSec === "number" && Number.isFinite(startSec) && Number.isFinite(endSec) && endSec > startSec;
+  const isHls = /m3u8/i.test(src);
   if (clip) a.push("-ss", String(startSec));
+  if (isHls) {
+    a.push("-extension_picky", "0", "-allowed_extensions", "ALL", "-protocol_whitelist", "file,http,https,tcp,tls,crypto");
+  }
   a.push("-i", src);
   if (clip) a.push("-t", String(endSec - startSec));
   a.push("-c", "copy", outPath);

@@ -29,7 +29,16 @@ export function buildFfmpegArgs(src: string, outPath: string, startSec?: number,
     Number.isFinite(startSec) &&
     Number.isFinite(endSec) &&
     endSec > startSec;
+  // 프록시 경유 HLS 는 변종/세그먼트가 확장자 없는 프록시 URL(/m3u8?url=, /stream?url=) + .jpeg 위장
+  // 세그먼트라 ffmpeg 7.x 의 extension_picky(엄격 확장자 검사)가 세그먼트를 거부 → "does not contain any
+  // stream". HLS 일 때만 extension_picky 0 + allowed_extensions ALL + protocol_whitelist 로 허용. 그러면
+  // ffmpeg 가 master 에서 최적 variant 의 video+audio 를 자동 선택한다(명시 -map 은 자막까지 매핑해 mp4
+  // -c copy 가 깨지므로 쓰지 않음). 직접 mp4 엔 불필요(+ 구버전 ffmpeg 에 없는 옵션이라 HLS 한정). 라이브 검증.
+  const isHls = /m3u8/i.test(src);
   if (clip) a.push("-ss", String(startSec));
+  if (isHls) {
+    a.push("-extension_picky", "0", "-allowed_extensions", "ALL", "-protocol_whitelist", "file,http,https,tcp,tls,crypto");
+  }
   a.push("-i", src);
   if (clip) a.push("-t", String((endSec as number) - (startSec as number)));
   a.push("-c", "copy", outPath);
