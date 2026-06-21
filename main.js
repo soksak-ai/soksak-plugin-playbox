@@ -46646,10 +46646,10 @@ var GLOBAL_CSS = `
   background: var(--inset, #111); color: var(--fg, #eee);
   border: 1px solid var(--bd, #3a3a3a); border-radius: 7px; font-size: 13px; outline: none;
 }
-.pb-input:focus { border-color: var(--accent, #4a9eff); }
+.pb-input:focus { border-color: var(--acc, #4a9eff); }
 .pb-btn {
   padding: 9px 14px; border-radius: 7px; border: 1px solid transparent;
-  background: var(--accent, #3a6ea5); color: #fff; cursor: pointer; font-size: 13px; white-space: nowrap;
+  background: var(--acc, #3a6ea5); color: #fff; cursor: pointer; font-size: 13px; white-space: nowrap;
 }
 .pb-btn:hover { filter: brightness(1.1); }
 .pb-btn:disabled { opacity: 0.5; cursor: default; }
@@ -46659,11 +46659,11 @@ var GLOBAL_CSS = `
   border: 1.5px dashed var(--bd, #444); border-radius: 10px; padding: 28px 16px;
   color: var(--fg3, #888); text-align: center; transition: border-color .15s, background .15s;
 }
-.pb-dragover .pb-drop { border-color: var(--accent, #4a9eff); background: rgba(74,158,255,0.08); }
+.pb-dragover .pb-drop { border-color: var(--acc, #4a9eff); background: rgba(74,158,255,0.08); }
 .pb-drop-title { font-size: 13px; color: var(--fg2, #bbb); }
 .pb-drop-sub { font-size: 11px; opacity: 0.6; }
 .pb-error { color: #f88; font-size: 12px; padding: 4px 2px; word-break: break-word; }
-.pb-flash { flex: 0 0 auto; padding: 5px 10px; background: var(--accent, #3a6ea5); color: #fff; font-size: 12px; }
+.pb-flash { flex: 0 0 auto; padding: 5px 10px; background: var(--acc, #3a6ea5); color: #fff; font-size: 12px; }
 .pb-hint { color: var(--fg3, #888); font-size: 12px; padding: 12px 14px; }
 
 /* \uBBF8\uB514\uC5B4 \uC7AC\uC0DD \uC601\uC5ED */
@@ -46676,7 +46676,7 @@ var GLOBAL_CSS = `
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
   border-bottom: 1px solid var(--bd, #2a2a2a); cursor: pointer;
 }
-.pb-row:hover { background: var(--hover, rgba(255,255,255,0.04)); }
+.pb-row:hover { background: var(--inset, rgba(255,255,255,0.04)); }
 .pb-row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pb-row-kind { font-size: 10px; color: var(--fg3, #888); padding: 1px 5px; border: 1px solid var(--bd,#3a3a3a); border-radius: 4px; }
 `;
