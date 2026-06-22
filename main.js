@@ -12751,8 +12751,11 @@ var require_jsx_runtime = __commonJS({
 });
 
 // src/plugin-entry.tsx
-var import_react4 = __toESM(require_react(), 1);
+var import_react5 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
+
+// src/view/App.tsx
+var import_react4 = __toESM(require_react(), 1);
 
 // src/view/PlayerView.tsx
 var import_react = __toESM(require_react(), 1);
@@ -47011,8 +47014,14 @@ function App({
   viewId,
   app,
   scope,
-  signal
+  signal,
+  setStatus
 }) {
+  const items = useLibrary(app?.data, scope);
+  const dl = items.filter((i) => i.status === "downloading").length;
+  (0, import_react4.useEffect)(() => {
+    setStatus?.(dl > 0 ? { code: "busy", message: `\uB2E4\uC6B4\uB85C\uB4DC ${dl}\uAC74 \uC9C4\uD589 \uC911` } : null);
+  }, [dl, setStatus]);
   if (viewId === "player") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PlayerView, { app, scope, signal });
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(LibrarySidebar, { app, scope, signal });
 }
@@ -47401,7 +47410,7 @@ function registerCommands(ctx, getSignal2, app) {
 
 // src/plugin-entry.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-var ErrBoundary = class extends import_react4.Component {
+var ErrBoundary = class extends import_react5.Component {
   state = { err: null };
   static getDerivedStateFromError(err) {
     return { err };
@@ -47447,7 +47456,16 @@ function mountView(container, viewId, ctx) {
   try {
     const root = (0, import_client.createRoot)(host);
     root.render(
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ErrBoundary, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(App, { viewId, app: pluginApp, scope, signal }) })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ErrBoundary, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        App,
+        {
+          viewId,
+          app: pluginApp,
+          scope,
+          signal,
+          setStatus: ctx?.setStatus
+        }
+      ) })
     );
     mounts.set(container, { root });
   } catch (e) {
