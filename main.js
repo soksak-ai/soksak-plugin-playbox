@@ -12751,14 +12751,11 @@ var require_jsx_runtime = __commonJS({
 });
 
 // src/plugin-entry.tsx
-var import_react5 = __toESM(require_react(), 1);
+var import_react4 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
-// src/view/App.tsx
-var import_react4 = __toESM(require_react(), 1);
-
 // src/view/PlayerView.tsx
-var import_react = __toESM(require_react(), 1);
+var import_react2 = __toESM(require_react(), 1);
 
 // src/spawn.ts
 function makeSpawn(app) {
@@ -13292,6 +13289,28 @@ async function patchItem(data, scope, id, patch) {
 }
 async function deleteLibraryItem(data, scope, id) {
   return data.delete(COLL, id, { scope });
+}
+
+// src/view/useLibrary.ts
+var import_react = __toESM(require_react(), 1);
+function useLibrary(data, scope) {
+  const [items, setItems] = (0, import_react.useState)([]);
+  (0, import_react.useEffect)(() => {
+    if (!data) return;
+    let alive = true;
+    const reload = () => {
+      void loadLibrary(data, scope).then((rows) => {
+        if (alive) setItems(rows);
+      });
+    };
+    void ensureDefined(data).then(reload, reload);
+    const un = data.watch(COLL, { scope }, reload);
+    return () => {
+      alive = false;
+      disposeOf(un);
+    };
+  }, [data, scope]);
+  return items;
 }
 
 // src/proxy.ts
@@ -46397,26 +46416,40 @@ function attachHls(video, src) {
 
 // src/view/PlayerView.tsx
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
-function PlayerView({ app, scope, signal }) {
-  const [media, setMedia] = (0, import_react.useState)(null);
-  const [currentInput, setCurrentInput] = (0, import_react.useState)(null);
-  const [clipStart, setClipStart] = (0, import_react.useState)(null);
-  const [flash, setFlash] = (0, import_react.useState)(null);
-  const [error, setError] = (0, import_react.useState)(null);
-  const [busy, setBusy] = (0, import_react.useState)(false);
-  const [url, setUrl] = (0, import_react.useState)("");
-  const [dragOver, setDragOver] = (0, import_react.useState)(false);
-  const [pstate, setPstate] = (0, import_react.useState)({ t: 0, paused: true, ready: 0 });
-  const [clipRange, setClipRange] = (0, import_react.useState)(null);
-  const [loop, setLoop] = (0, import_react.useState)(true);
-  const videoRef = (0, import_react.useRef)(null);
-  const fileRef = (0, import_react.useRef)(null);
-  (0, import_react.useEffect)(() => {
+function PlayerView({
+  app,
+  scope,
+  signal,
+  setStatus
+}) {
+  const [media, setMedia] = (0, import_react2.useState)(null);
+  const [currentInput, setCurrentInput] = (0, import_react2.useState)(null);
+  const [clipStart, setClipStart] = (0, import_react2.useState)(null);
+  const [flash, setFlash] = (0, import_react2.useState)(null);
+  const [error, setError] = (0, import_react2.useState)(null);
+  const [busy, setBusy] = (0, import_react2.useState)(false);
+  const [url, setUrl] = (0, import_react2.useState)("");
+  const [dragOver, setDragOver] = (0, import_react2.useState)(false);
+  const [pstate, setPstate] = (0, import_react2.useState)({ t: 0, paused: true, ready: 0 });
+  const [clipRange, setClipRange] = (0, import_react2.useState)(null);
+  const [loop, setLoop] = (0, import_react2.useState)(true);
+  const videoRef = (0, import_react2.useRef)(null);
+  const fileRef = (0, import_react2.useRef)(null);
+  const libItems = useLibrary(app?.data, scope);
+  const downloading = libItems.filter((i) => i.status === "downloading").length;
+  (0, import_react2.useEffect)(() => {
+    const playing = !pstate.paused;
+    setStatus?.(
+      playing ? { code: "busy", message: "\uC7AC\uC0DD \uC911" } : downloading > 0 ? { code: "busy", message: `\uB2E4\uC6B4\uB85C\uB4DC ${downloading}\uAC74 \uC9C4\uD589 \uC911` } : null
+    );
+    return () => setStatus?.(null);
+  }, [pstate.paused, downloading, setStatus]);
+  (0, import_react2.useEffect)(() => {
     if (media?.mode === "hls" && videoRef.current) {
       return attachHls(videoRef.current, media.src);
     }
   }, [media]);
-  const onVideoState = (0, import_react.useCallback)(
+  const onVideoState = (0, import_react2.useCallback)(
     (e) => {
       const v = e.currentTarget;
       setPstate({ t: v.currentTime, paused: v.paused, ready: v.readyState });
@@ -46442,7 +46475,7 @@ function PlayerView({ app, scope, signal }) {
     },
     [clipRange, loop, signal, currentInput]
   );
-  const onLoadedMeta = (0, import_react.useCallback)(
+  const onLoadedMeta = (0, import_react2.useCallback)(
     (e) => {
       const v = e.currentTarget;
       if (clipRange) {
@@ -46456,11 +46489,11 @@ function PlayerView({ app, scope, signal }) {
     },
     [clipRange]
   );
-  const showFlash = (0, import_react.useCallback)((msg) => {
+  const showFlash = (0, import_react2.useCallback)((msg) => {
     setFlash(msg);
     window.setTimeout(() => setFlash((cur) => cur === msg ? null : cur), 2200);
   }, []);
-  const playResolved = (0, import_react.useCallback)(
+  const playResolved = (0, import_react2.useCallback)(
     async (r, inputUrl) => {
       if (r.kind === "unsupported") {
         setError(r.reason ?? "\uC7AC\uC0DD\uD560 \uC218 \uC5C6\uB294 \uC785\uB825");
@@ -46474,7 +46507,8 @@ function PlayerView({ app, scope, signal }) {
         return;
       }
       if (r.kind === "file" && r.filePath) {
-        setMedia({ mode: "video", src: r.filePath, title: r.title });
+        const src2 = app?.fs?.url ? await app.fs.url(r.filePath) : r.filePath;
+        setMedia({ mode: "video", src: src2, title: r.title });
         return;
       }
       const src = await proxiedUrl(app, r);
@@ -46482,7 +46516,7 @@ function PlayerView({ app, scope, signal }) {
     },
     [app]
   );
-  const playInput = (0, import_react.useCallback)(
+  const playInput = (0, import_react2.useCallback)(
     async (v) => {
       const raw = v.trim();
       if (!raw) return;
@@ -46498,14 +46532,14 @@ function PlayerView({ app, scope, signal }) {
     },
     [app, playResolved]
   );
-  const playFile = (0, import_react.useCallback)((file) => {
+  const playFile = (0, import_react2.useCallback)((file) => {
     setError(null);
     setClipStart(null);
     setClipRange(null);
     setMedia({ mode: "video", src: URL.createObjectURL(file), title: file.name });
     setCurrentInput(file.name);
   }, []);
-  (0, import_react.useEffect)(() => {
+  (0, import_react2.useEffect)(() => {
     if (!signal) return;
     const handle = () => {
       const p = signal.consumePlay();
@@ -46520,7 +46554,7 @@ function PlayerView({ app, scope, signal }) {
     handle();
     return signal.subscribe(handle);
   }, [signal, playInput]);
-  (0, import_react.useEffect)(() => {
+  (0, import_react2.useEffect)(() => {
     if (!signal) return;
     const handle = () => {
       const v = videoRef.current;
@@ -46534,16 +46568,16 @@ function PlayerView({ app, scope, signal }) {
     };
     return signal.subscribe(handle);
   }, [signal]);
-  (0, import_react.useEffect)(() => {
+  (0, import_react2.useEffect)(() => {
     if (!media) signal?.setPlayerState(null);
   }, [media, signal]);
-  const markStart = (0, import_react.useCallback)(() => {
+  const markStart = (0, import_react2.useCallback)(() => {
     const t = videoRef.current?.currentTime;
     if (t == null) return;
     setClipStart(t);
     showFlash(`\uD074\uB9BD \uC2DC\uC791 ${fmtTime(t, true)} \u2014 \uB05D \uC9C0\uC810\uC5D0\uC11C ]`);
   }, [showFlash]);
-  const markEnd = (0, import_react.useCallback)(async () => {
+  const markEnd = (0, import_react2.useCallback)(async () => {
     const t = videoRef.current?.currentTime;
     if (t == null || clipStart == null || !currentInput || !app?.data) {
       showFlash("\uBA3C\uC800 [ \uB85C \uC2DC\uC791 \uC9C0\uC810\uC744 \uD45C\uC2DC\uD558\uC138\uC694");
@@ -46565,7 +46599,7 @@ function PlayerView({ app, scope, signal }) {
     }
     setClipStart(null);
   }, [app, scope, clipStart, currentInput, showFlash]);
-  const downloadCurrent = (0, import_react.useCallback)(async () => {
+  const downloadCurrent = (0, import_react2.useCallback)(async () => {
     if (!currentInput) {
       showFlash("\uC7AC\uC0DD \uC911\uC778 \uC785\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4");
       return;
@@ -46586,7 +46620,7 @@ function PlayerView({ app, scope, signal }) {
       showFlash(`\uB2E4\uC6B4\uB85C\uB4DC \uC2E4\uD328: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [app, currentInput, clipStart, media, showFlash]);
-  const onMediaKey = (0, import_react.useCallback)(
+  const onMediaKey = (0, import_react2.useCallback)(
     (e) => {
       if (e.key === "[") {
         e.preventDefault();
@@ -46598,12 +46632,12 @@ function PlayerView({ app, scope, signal }) {
     },
     [markStart, markEnd]
   );
-  const submitUrl = (0, import_react.useCallback)(() => {
+  const submitUrl = (0, import_react2.useCallback)(() => {
     if (busy) return;
     setClipRange(null);
     void playInput(url);
   }, [busy, url, playInput]);
-  const onDrop = (0, import_react.useCallback)(
+  const onDrop = (0, import_react2.useCallback)(
     (e) => {
       e.preventDefault();
       setDragOver(false);
@@ -46740,30 +46774,6 @@ function PlayerView({ app, scope, signal }) {
 
 // src/view/LibrarySidebar.tsx
 var import_react3 = __toESM(require_react(), 1);
-
-// src/view/useLibrary.ts
-var import_react2 = __toESM(require_react(), 1);
-function useLibrary(data, scope) {
-  const [items, setItems] = (0, import_react2.useState)([]);
-  (0, import_react2.useEffect)(() => {
-    if (!data) return;
-    let alive = true;
-    const reload = () => {
-      void loadLibrary(data, scope).then((rows) => {
-        if (alive) setItems(rows);
-      });
-    };
-    void ensureDefined(data).then(reload, reload);
-    const un = data.watch(COLL, { scope }, reload);
-    return () => {
-      alive = false;
-      disposeOf(un);
-    };
-  }, [data, scope]);
-  return items;
-}
-
-// src/view/LibrarySidebar.tsx
 var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
 function LibrarySidebar({ app, scope, signal }) {
   const [url, setUrl] = (0, import_react3.useState)("");
@@ -47017,12 +47027,8 @@ function App({
   signal,
   setStatus
 }) {
-  const items = useLibrary(app?.data, scope);
-  const dl = items.filter((i) => i.status === "downloading").length;
-  (0, import_react4.useEffect)(() => {
-    setStatus?.(dl > 0 ? { code: "busy", message: `\uB2E4\uC6B4\uB85C\uB4DC ${dl}\uAC74 \uC9C4\uD589 \uC911` } : null);
-  }, [dl, setStatus]);
-  if (viewId === "player") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PlayerView, { app, scope, signal });
+  if (viewId === "player")
+    return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PlayerView, { app, scope, signal, setStatus });
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(LibrarySidebar, { app, scope, signal });
 }
 
@@ -47410,7 +47416,7 @@ function registerCommands(ctx, getSignal2, app) {
 
 // src/plugin-entry.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-var ErrBoundary = class extends import_react5.Component {
+var ErrBoundary = class extends import_react4.Component {
   state = { err: null };
   static getDerivedStateFromError(err) {
     return { err };
