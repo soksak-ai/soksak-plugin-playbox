@@ -12,6 +12,7 @@ import { fmtTime, classify, downloadDir } from "@/util";
 import { resolveFull } from "@/resolveFull";
 import type { PlayerSignal } from "@/signal";
 import { addItem } from "@/data";
+import { useLibrary } from "./useLibrary";
 import { runDownload } from "@/download";
 import type { Resolved } from "@/types";
 import { attachHls } from "./hls";
@@ -19,7 +20,17 @@ import { proxiedUrl } from "@/proxy";
 
 type Media = { mode: "video" | "hls" | "iframe"; src: string; title?: string };
 
-export default function PlayerView({ app, scope, signal }: { app: any; scope: string; signal: PlayerSignal | null }) {
+export default function PlayerView({
+  app,
+  scope,
+  signal,
+  setStatus,
+}: {
+  app: any;
+  scope: string;
+  signal: PlayerSignal | null;
+  setStatus?: (s: { code: string; message?: string } | null) => void;
+}) {
   const [media, setMedia] = useState<Media | null>(null);
   const [currentInput, setCurrentInput] = useState<string | null>(null);
   const [clipStart, setClipStart] = useState<number | null>(null);
@@ -36,6 +47,22 @@ export default function PlayerView({ app, scope, signal }: { app: any; scope: st
   const [loop, setLoop] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // close guard — 재생 중 OR 라이브러리 다운로드 중이면 이 player 탭을 닫기 전에 코어가 경고(R1).
+  // 멈추거나 다운로드가 끝나면 해제(null), 언마운트(탭 닫힘) 시 정리. pstate.paused 는 실제 video 이벤트.
+  const libItems = useLibrary(app?.data, scope);
+  const downloading = libItems.filter((i) => i.status === "downloading").length;
+  useEffect(() => {
+    const playing = !pstate.paused;
+    setStatus?.(
+      playing
+        ? { code: "busy", message: "재생 중" }
+        : downloading > 0
+          ? { code: "busy", message: `다운로드 ${downloading}건 진행 중` }
+          : null,
+    );
+    return () => setStatus?.(null);
+  }, [pstate.paused, downloading, setStatus]);
 
   useEffect(() => {
     if (media?.mode === "hls" && videoRef.current) {
@@ -109,7 +136,10 @@ export default function PlayerView({ app, scope, signal }: { app: any; scope: st
         return;
       }
       if (r.kind === "file" && r.filePath) {
-        setMedia({ mode: "video", src: r.filePath, title: r.title });
+        // 로컬 파일은 코어 표준 인터페이스 fs.url 로 webview 로드 가능 URL 을 받는다 — 에디터가 파일을
+        // 여는 것과 동일 경로(read_file_base64 기반). asset:// 는 hidden 디렉터리(.soksak)를 막는다.
+        const src = app?.fs?.url ? await app.fs.url(r.filePath) : r.filePath;
+        setMedia({ mode: "video", src, title: r.title });
         return;
       }
       const src = await proxiedUrl(app, r);
