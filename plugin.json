@@ -67,7 +67,8 @@
     "commands:inject",
     "data",
     "process",
-    "programs"
+    "programs",
+    "fs:read"
   ],
   "contributes": {
     "views": [
