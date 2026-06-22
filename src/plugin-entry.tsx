@@ -65,7 +65,15 @@ function mountView(container: HTMLElement, viewId: string, ctx: { projectId?: st
     const root = createRoot(host);
     root.render(
       <ErrBoundary>
-        <App viewId={viewId} app={pluginApp as never} scope={scope} signal={signal as never} />
+        <App
+          viewId={viewId}
+          app={pluginApp as never}
+          scope={scope}
+          signal={signal as never}
+          setStatus={
+            (ctx as { setStatus?: (s: { code: string; message?: string } | null) => void } | undefined)?.setStatus
+          }
+        />
       </ErrBoundary>,
     );
     mounts.set(container, { root });
