@@ -53,7 +53,7 @@ Run `playbox.doctor` to check what is installed.
 
 ## Commands
 
-Every feature is exposed as a command (`sok plugin.soksak-plugin-media-player.<name>` / MCP):
+Every feature is exposed as a command (`sok plugin.soksak-plugin-playbox.<name>` / MCP):
 `favorite.add`, `favorite.remove`, `library.list`, `library.filter`, `resolve`,
 `play`, `clip.add`, `clip.list`, `download`, `doctor`, `setup`, `ping`.
 

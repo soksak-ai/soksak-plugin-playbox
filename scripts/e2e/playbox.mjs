@@ -10,7 +10,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const PLUGIN_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
-const PLUGIN_ID = "soksak-plugin-media-player";
+const PLUGIN_ID = "soksak-plugin-playbox";
 const P = `plugin.${PLUGIN_ID}.`;
 const SOCKET = process.env.SOKSAK_SOCKET || path.join(os.homedir(), ".soksak", "com.soksak.dev.sock");
 const MARKER = "soksak-e2e-media-player"; // 고정 — 크래시 잔재도 탐지·청소 가능(랜덤 금지).
