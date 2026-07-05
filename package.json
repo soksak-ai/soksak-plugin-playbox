@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "tsc --noEmit && vitest run && node build.mjs",
     "doctor": "soksak-plugin-doctor",
-    "prepublishOnly": "npm run doctor"
+    "prepublishOnly": "npm run doctor",
+    "test-unit": "npm run typecheck && vitest run"
   },
   "dependencies": {
     "hls.js": "^1.5.18",
