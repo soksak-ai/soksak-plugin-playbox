@@ -46,6 +46,7 @@ export function registerCommands(
     description: "인스턴스 진단 — { instanceId, scope, count, downloadDir }. 뷰 debug 노드와 대조.",
     params: { projectId: projectIdParam },
     returns: "{ instanceId, scope, count, downloadDir }",
+    message: (d: any) => `scope ${d?.scope} 에 항목 ${d?.count ?? 0}개.`,
     handler: async (p: any) => {
       const items = await loadLibrary(data(), scopeFor(p));
       return { instanceId: sig(p).id(), scope: scopeFor(p), count: items.length, downloadDir: downloadDir(app) };
@@ -60,6 +61,7 @@ export function registerCommands(
       projectId: projectIdParam,
     },
     returns: "{ id, item }",
+    message: (d: any) => `즐겨찾기 "${d?.item?.title}" 을(를) 추가했습니다.`,
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
@@ -78,6 +80,7 @@ export function registerCommands(
     description: "라이브러리 항목 삭제(즐겨찾기/클립 공통). id 필수.",
     params: { id: { type: "string", description: "항목 id", required: true }, projectId: projectIdParam },
     returns: "{ removed }",
+    message: (d: any) => (d?.removed ? "항목을 삭제했습니다." : "삭제할 항목이 없습니다."),
     danger: "destructive",
     handler: async (p: any) => ({ removed: await deleteLibraryItem(data(), scopeFor(p), String(p?.id ?? "")) }),
   });
@@ -86,6 +89,7 @@ export function registerCommands(
     description: "라이브러리 목록(즐겨찾기+클립). kind 로 좁힌다(favorite|clip).",
     params: { kind: { type: "string", description: "favorite | clip (생략=전체)" }, projectId: projectIdParam },
     returns: "{ items, count }",
+    message: (d: any) => `${d?.count ?? 0}개.`,
     handler: async (p: any) => {
       const kind = p?.kind as string | undefined;
       const all = await loadLibrary(data(), scopeFor(p));
@@ -102,6 +106,7 @@ export function registerCommands(
       projectId: projectIdParam,
     },
     returns: "{ items, count }",
+    message: (d: any) => `${d?.count ?? 0}개를 찾았습니다.`,
     handler: async (p: any) => {
       let items = await searchLibrary(data(), scopeFor(p), String(p?.text ?? ""));
       const kind = p?.kind as string | undefined;
@@ -114,6 +119,7 @@ export function registerCommands(
     description: "입력 URL 1회 해석 → {kind, mediaUrl|embedUrl|filePath, needsProxy, referer}. 임의 페이지는 yt-dlp 위임.",
     params: { inputUrl: { type: "string", description: "비디오 URL/경로", required: true } },
     returns: "Resolved",
+    message: (d: any) => `${d?.kind} 로 해석했습니다.`,
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
@@ -131,6 +137,7 @@ export function registerCommands(
       projectId: projectIdParam,
     },
     returns: "{ requested, resolved }",
+    message: () => "재생을 요청했습니다.",
     danger: "inject",
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
@@ -158,6 +165,7 @@ export function registerCommands(
       projectId: projectIdParam,
     },
     returns: "{ id, item }",
+    message: (d: any) => `클립 "${d?.item?.title}" 을(를) 추가했습니다.`,
     handler: async (p: any) => {
       const inputUrl = String(p?.inputUrl ?? "").trim();
       const startSec = Number(p?.startSec);
@@ -185,6 +193,7 @@ export function registerCommands(
     description: "클립만 목록(라이브러리 kind=clip).",
     params: { projectId: projectIdParam },
     returns: "{ items, count }",
+    message: (d: any) => `클립 ${d?.count ?? 0}개.`,
     handler: async (p: any) => {
       const items = (await loadLibrary(data(), scopeFor(p))).filter((i) => i.kind === "clip");
       return { items, count: items.length };
@@ -201,6 +210,7 @@ export function registerCommands(
       projectId: projectIdParam,
     },
     returns: "{ ok, item }",
+    message: () => "클립을 수정했습니다.",
     handler: async (p: any) => {
       const id = String(p?.id ?? "");
       if (!id) return { ok: false, code: "INVALID_PARAMS", message: "id 필요" };
@@ -220,6 +230,7 @@ export function registerCommands(
     description: "현재 플레이어 재생 상태 — { open, inputUrl, currentTime, duration, paused, clip, loop }. read-only.",
     params: { projectId: projectIdParam },
     returns: "{ open, ...PlayerState }",
+    message: (d: any) => (d?.open ? "재생 중입니다." : "플레이어가 닫혀 있습니다."),
     handler: async (p: any) => {
       const s = sig(p).getPlayerState();
       return s ? { open: true, ...s } : { open: false };
@@ -234,6 +245,7 @@ export function registerCommands(
       projectId: projectIdParam,
     },
     returns: "{ ok }",
+    message: () => "플레이어에 적용했습니다.",
     danger: "inject",
     handler: async (p: any) => {
       const action = String(p?.action ?? "");
@@ -255,6 +267,7 @@ export function registerCommands(
       endSec: { type: "number", description: "구간 종료 초" },
     },
     returns: "{ ok, path }",
+    message: (d: any) => `${d?.path} 에 저장했습니다.`,
     danger: "inject",
     handler: async (p: any) =>
       runDownload(app, spawn, {
@@ -269,6 +282,7 @@ export function registerCommands(
     description: "외부 의존성(yt-dlp, ffmpeg) 탐지·버전 보고. ready = yt-dlp 사용 가능 여부. read-only.",
     params: {},
     returns: "{ ytdlp:{found,version}, ffmpeg:{found,version}, ready }",
+    message: (d: any) => (d?.ready ? "yt-dlp 사용 가능합니다." : "yt-dlp 를 찾지 못했습니다."),
     handler: async () => {
       const [ytdlp, ffmpeg] = await Promise.all([
         probe(spawn, "yt-dlp", ["--version"]),
@@ -283,6 +297,7 @@ export function registerCommands(
       "yt-dlp/ffmpeg 설치 점검 및 설치. 기본은 계획만 반환(무엇이 없고 어떤 명령으로 설치하는지). install:true 면 실제 설치 시도.",
     params: { install: { type: "boolean", description: "true 면 실제 설치 실행(기본 false=계획만)" } },
     returns: "{ ytdlp, ffmpeg, actions, installed? }",
+    message: (d: any) => (d?.installed ? "설치를 시도했습니다." : `설치 계획 ${(d?.actions ?? []).length}건.`),
     danger: "inject",
     handler: async (p: any) => {
       const doInstall = p?.install === true;
