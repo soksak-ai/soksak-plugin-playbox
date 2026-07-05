@@ -47162,6 +47162,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uC778\uC2A4\uD134\uC2A4 \uC9C4\uB2E8 \u2014 { instanceId, scope, count, downloadDir }. \uBDF0 debug \uB178\uB4DC\uC640 \uB300\uC870.",
     params: { projectId: projectIdParam },
     returns: "{ instanceId, scope, count, downloadDir }",
+    message: (d) => `scope ${d?.scope} \uC5D0 \uD56D\uBAA9 ${d?.count ?? 0}\uAC1C.`,
     handler: async (p) => {
       const items = await loadLibrary(data(), scopeFor(p));
       return { instanceId: sig(p).id(), scope: scopeFor(p), count: items.length, downloadDir: downloadDir(app) };
@@ -47175,6 +47176,7 @@ function registerCommands(ctx, getSignal2, app) {
       projectId: projectIdParam
     },
     returns: "{ id, item }",
+    message: (d) => `\uC990\uACA8\uCC3E\uAE30 "${d?.item?.title}" \uC744(\uB97C) \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4.`,
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
@@ -47192,6 +47194,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uB77C\uC774\uBE0C\uB7EC\uB9AC \uD56D\uBAA9 \uC0AD\uC81C(\uC990\uACA8\uCC3E\uAE30/\uD074\uB9BD \uACF5\uD1B5). id \uD544\uC218.",
     params: { id: { type: "string", description: "\uD56D\uBAA9 id", required: true }, projectId: projectIdParam },
     returns: "{ removed }",
+    message: (d) => d?.removed ? "\uD56D\uBAA9\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4." : "\uC0AD\uC81C\uD560 \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
     danger: "destructive",
     handler: async (p) => ({ removed: await deleteLibraryItem(data(), scopeFor(p), String(p?.id ?? "")) })
   });
@@ -47199,6 +47202,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uB77C\uC774\uBE0C\uB7EC\uB9AC \uBAA9\uB85D(\uC990\uACA8\uCC3E\uAE30+\uD074\uB9BD). kind \uB85C \uC881\uD78C\uB2E4(favorite|clip).",
     params: { kind: { type: "string", description: "favorite | clip (\uC0DD\uB7B5=\uC804\uCCB4)" }, projectId: projectIdParam },
     returns: "{ items, count }",
+    message: (d) => `${d?.count ?? 0}\uAC1C.`,
     handler: async (p) => {
       const kind = p?.kind;
       const all = await loadLibrary(data(), scopeFor(p));
@@ -47214,6 +47218,7 @@ function registerCommands(ctx, getSignal2, app) {
       projectId: projectIdParam
     },
     returns: "{ items, count }",
+    message: (d) => `${d?.count ?? 0}\uAC1C\uB97C \uCC3E\uC558\uC2B5\uB2C8\uB2E4.`,
     handler: async (p) => {
       let items = await searchLibrary(data(), scopeFor(p), String(p?.text ?? ""));
       const kind = p?.kind;
@@ -47225,6 +47230,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uC785\uB825 URL 1\uD68C \uD574\uC11D \u2192 {kind, mediaUrl|embedUrl|filePath, needsProxy, referer}. \uC784\uC758 \uD398\uC774\uC9C0\uB294 yt-dlp \uC704\uC784.",
     params: { inputUrl: { type: "string", description: "\uBE44\uB514\uC624 URL/\uACBD\uB85C", required: true } },
     returns: "Resolved",
+    message: (d) => `${d?.kind} \uB85C \uD574\uC11D\uD588\uC2B5\uB2C8\uB2E4.`,
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
@@ -47241,6 +47247,7 @@ function registerCommands(ctx, getSignal2, app) {
       projectId: projectIdParam
     },
     returns: "{ requested, resolved }",
+    message: () => "\uC7AC\uC0DD\uC744 \uC694\uCCAD\uD588\uC2B5\uB2C8\uB2E4.",
     danger: "inject",
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
@@ -47267,6 +47274,7 @@ function registerCommands(ctx, getSignal2, app) {
       projectId: projectIdParam
     },
     returns: "{ id, item }",
+    message: (d) => `\uD074\uB9BD "${d?.item?.title}" \uC744(\uB97C) \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4.`,
     handler: async (p) => {
       const inputUrl = String(p?.inputUrl ?? "").trim();
       const startSec = Number(p?.startSec);
@@ -47293,6 +47301,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uD074\uB9BD\uB9CC \uBAA9\uB85D(\uB77C\uC774\uBE0C\uB7EC\uB9AC kind=clip).",
     params: { projectId: projectIdParam },
     returns: "{ items, count }",
+    message: (d) => `\uD074\uB9BD ${d?.count ?? 0}\uAC1C.`,
     handler: async (p) => {
       const items = (await loadLibrary(data(), scopeFor(p))).filter((i) => i.kind === "clip");
       return { items, count: items.length };
@@ -47308,6 +47317,7 @@ function registerCommands(ctx, getSignal2, app) {
       projectId: projectIdParam
     },
     returns: "{ ok, item }",
+    message: () => "\uD074\uB9BD\uC744 \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.",
     handler: async (p) => {
       const id = String(p?.id ?? "");
       if (!id) return { ok: false, code: "INVALID_PARAMS", message: "id \uD544\uC694" };
@@ -47326,6 +47336,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uD604\uC7AC \uD50C\uB808\uC774\uC5B4 \uC7AC\uC0DD \uC0C1\uD0DC \u2014 { open, inputUrl, currentTime, duration, paused, clip, loop }. read-only.",
     params: { projectId: projectIdParam },
     returns: "{ open, ...PlayerState }",
+    message: (d) => d?.open ? "\uC7AC\uC0DD \uC911\uC785\uB2C8\uB2E4." : "\uD50C\uB808\uC774\uC5B4\uAC00 \uB2EB\uD600 \uC788\uC2B5\uB2C8\uB2E4.",
     handler: async (p) => {
       const s = sig(p).getPlayerState();
       return s ? { open: true, ...s } : { open: false };
@@ -47339,6 +47350,7 @@ function registerCommands(ctx, getSignal2, app) {
       projectId: projectIdParam
     },
     returns: "{ ok }",
+    message: () => "\uD50C\uB808\uC774\uC5B4\uC5D0 \uC801\uC6A9\uD588\uC2B5\uB2C8\uB2E4.",
     danger: "inject",
     handler: async (p) => {
       const action = String(p?.action ?? "");
@@ -47358,6 +47370,7 @@ function registerCommands(ctx, getSignal2, app) {
       endSec: { type: "number", description: "\uAD6C\uAC04 \uC885\uB8CC \uCD08" }
     },
     returns: "{ ok, path }",
+    message: (d) => `${d?.path} \uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.`,
     danger: "inject",
     handler: async (p) => runDownload(app, spawn, {
       inputUrl: String(p?.inputUrl ?? ""),
@@ -47370,6 +47383,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "\uC678\uBD80 \uC758\uC874\uC131(yt-dlp, ffmpeg) \uD0D0\uC9C0\xB7\uBC84\uC804 \uBCF4\uACE0. ready = yt-dlp \uC0AC\uC6A9 \uAC00\uB2A5 \uC5EC\uBD80. read-only.",
     params: {},
     returns: "{ ytdlp:{found,version}, ffmpeg:{found,version}, ready }",
+    message: (d) => d?.ready ? "yt-dlp \uC0AC\uC6A9 \uAC00\uB2A5\uD569\uB2C8\uB2E4." : "yt-dlp \uB97C \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
     handler: async () => {
       const [ytdlp, ffmpeg] = await Promise.all([
         probe2(spawn, "yt-dlp", ["--version"]),
@@ -47382,6 +47396,7 @@ function registerCommands(ctx, getSignal2, app) {
     description: "yt-dlp/ffmpeg \uC124\uCE58 \uC810\uAC80 \uBC0F \uC124\uCE58. \uAE30\uBCF8\uC740 \uACC4\uD68D\uB9CC \uBC18\uD658(\uBB34\uC5C7\uC774 \uC5C6\uACE0 \uC5B4\uB5A4 \uBA85\uB839\uC73C\uB85C \uC124\uCE58\uD558\uB294\uC9C0). install:true \uBA74 \uC2E4\uC81C \uC124\uCE58 \uC2DC\uB3C4.",
     params: { install: { type: "boolean", description: "true \uBA74 \uC2E4\uC81C \uC124\uCE58 \uC2E4\uD589(\uAE30\uBCF8 false=\uACC4\uD68D\uB9CC)" } },
     returns: "{ ytdlp, ffmpeg, actions, installed? }",
+    message: (d) => d?.installed ? "\uC124\uCE58\uB97C \uC2DC\uB3C4\uD588\uC2B5\uB2C8\uB2E4." : `\uC124\uCE58 \uACC4\uD68D ${(d?.actions ?? []).length}\uAC74.`,
     danger: "inject",
     handler: async (p) => {
       const doInstall = p?.install === true;
@@ -47507,6 +47522,7 @@ var plugin_entry_default = {
       ctx.subscriptions.push(
         app.commands.register("ping", {
           description: "\uD50C\uB7EC\uADF8\uC778 \uC801\uC7AC/\uBC84\uC804 \uD655\uC778(E2E)",
+          message: (d) => `${d?.plugin} ${d?.version} \uC774(\uAC00) \uC801\uC7AC\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.`,
           handler: async () => ({ ok: true, plugin: "soksak-plugin-playbox", version: "0.0.1", phase: "M1" })
         })
       );

@@ -115,6 +115,7 @@ export default {
       ctx.subscriptions.push(
         app.commands.register("ping", {
           description: "플러그인 적재/버전 확인(E2E)",
+          message: (d: any) => `${d?.plugin} ${d?.version} 이(가) 적재되어 있습니다.`,
           handler: async () => ({ ok: true, plugin: "soksak-plugin-playbox", version: "0.0.1", phase: "M1" }),
         }),
       );
