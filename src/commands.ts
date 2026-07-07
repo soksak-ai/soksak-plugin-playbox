@@ -62,6 +62,16 @@ export function registerCommands(
     },
     returns: "{ id, item }",
     message: (d: any) => `즐겨찾기 "${d?.item?.title}" 을(를) 추가했습니다.`,
+    // 추가 직후 바로 재생 가능함을 제시(add→play 사이클).
+    hint: (d: any) =>
+      d?.item?.inputUrl
+        ? [
+            {
+              cmd: `sok plugin.soksak-plugin-playbox.play {"inputUrl":"${d.item.inputUrl}"}`,
+              why: "추가한 즐겨찾기를 바로 재생할 수 있습니다",
+            },
+          ]
+        : [],
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
@@ -120,6 +130,8 @@ export function registerCommands(
     params: { inputUrl: { type: "string", description: "비디오 URL/경로", required: true } },
     returns: "Resolved",
     message: (d: any) => `${d?.kind} 로 해석했습니다.`,
+    // 해석 성공 시 곧장 재생 가능함을 제시(resolve→play 사이클).
+    hint: (d: any) => (d?.kind && d.kind !== "unsupported" ? [{ cmd: "play", why: "해석한 URL 을 재생할 수 있습니다" }] : []),
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl 필요" };
@@ -138,6 +150,14 @@ export function registerCommands(
     },
     returns: "{ requested, resolved }",
     message: () => "재생을 요청했습니다.",
+    // 재생 요청 직후 상태 확인·클립 저장으로 이어질 수 있음을 제시(play↔player.state/clip.add 사이클).
+    hint: (d: any) =>
+      d?.requested
+        ? [
+            { cmd: "player.state", why: "현재 재생 상태를 확인할 수 있습니다" },
+            { cmd: "clip.add", why: "재생 중 구간을 클립으로 저장할 수 있습니다" },
+          ]
+        : [],
     danger: "inject",
     handler: async (p: any) => {
       const input = String(p?.inputUrl ?? "").trim();
@@ -166,6 +186,16 @@ export function registerCommands(
     },
     returns: "{ id, item }",
     message: (d: any) => `클립 "${d?.item?.title}" 을(를) 추가했습니다.`,
+    // 추가한 클립을 그 구간으로 바로 반복 재생할 수 있음을 제시(clip.add→play 사이클).
+    hint: (d: any) =>
+      d?.item?.inputUrl
+        ? [
+            {
+              cmd: `sok plugin.soksak-plugin-playbox.play {"inputUrl":"${d.item.inputUrl}","startSec":${d.item.startSec},"endSec":${d.item.endSec}}`,
+              why: "추가한 클립을 구간 반복 재생할 수 있습니다",
+            },
+          ]
+        : [],
     handler: async (p: any) => {
       const inputUrl = String(p?.inputUrl ?? "").trim();
       const startSec = Number(p?.startSec);
@@ -246,6 +276,8 @@ export function registerCommands(
     },
     returns: "{ ok }",
     message: () => "플레이어에 적용했습니다.",
+    // 적용된 결과를 바로 확인할 수 있음을 제시(player.control→player.state 사이클).
+    hint: (d: any) => (d?.ok ? [{ cmd: "player.state", why: "적용된 상태를 확인할 수 있습니다" }] : []),
     danger: "inject",
     handler: async (p: any) => {
       const action = String(p?.action ?? "");
@@ -283,6 +315,8 @@ export function registerCommands(
     params: {},
     returns: "{ ytdlp:{found,version}, ffmpeg:{found,version}, ready }",
     message: (d: any) => (d?.ready ? "yt-dlp 사용 가능합니다." : "yt-dlp 를 찾지 못했습니다."),
+    // 부족한 의존성 발견 시 설치 명령을 제시(doctor→setup 사이클).
+    hint: (d: any) => (d?.ready ? [] : [{ cmd: "setup", why: "부족한 의존성(yt-dlp)을 설치할 수 있습니다" }]),
     handler: async () => {
       const [ytdlp, ffmpeg] = await Promise.all([
         probe(spawn, "yt-dlp", ["--version"]),
@@ -298,6 +332,11 @@ export function registerCommands(
     params: { install: { type: "boolean", description: "true 면 실제 설치 실행(기본 false=계획만)" } },
     returns: "{ ytdlp, ffmpeg, actions, installed? }",
     message: (d: any) => (d?.installed ? "설치를 시도했습니다." : `설치 계획 ${(d?.actions ?? []).length}건.`),
+    // 계획만 반환된 경우 실제 설치 실행을 제시(setup(계획)→setup(install:true) 사이클).
+    hint: (d: any) =>
+      !d?.installed && (d?.actions?.length ?? 0) > 0
+        ? [{ cmd: 'sok plugin.soksak-plugin-playbox.setup {"install":true}', why: "제안된 설치를 바로 실행할 수 있습니다" }]
+        : [],
     danger: "inject",
     handler: async (p: any) => {
       const doInstall = p?.install === true;

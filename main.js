@@ -47177,6 +47177,13 @@ function registerCommands(ctx, getSignal2, app) {
     },
     returns: "{ id, item }",
     message: (d) => `\uC990\uACA8\uCC3E\uAE30 "${d?.item?.title}" \uC744(\uB97C) \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4.`,
+    // 추가 직후 바로 재생 가능함을 제시(add→play 사이클).
+    hint: (d) => d?.item?.inputUrl ? [
+      {
+        cmd: `sok plugin.soksak-plugin-playbox.play {"inputUrl":"${d.item.inputUrl}"}`,
+        why: "\uCD94\uAC00\uD55C \uC990\uACA8\uCC3E\uAE30\uB97C \uBC14\uB85C \uC7AC\uC0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4"
+      }
+    ] : [],
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
@@ -47231,6 +47238,8 @@ function registerCommands(ctx, getSignal2, app) {
     params: { inputUrl: { type: "string", description: "\uBE44\uB514\uC624 URL/\uACBD\uB85C", required: true } },
     returns: "Resolved",
     message: (d) => `${d?.kind} \uB85C \uD574\uC11D\uD588\uC2B5\uB2C8\uB2E4.`,
+    // 해석 성공 시 곧장 재생 가능함을 제시(resolve→play 사이클).
+    hint: (d) => d?.kind && d.kind !== "unsupported" ? [{ cmd: "play", why: "\uD574\uC11D\uD55C URL \uC744 \uC7AC\uC0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }] : [],
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
       if (!input) return { ok: false, code: "INVALID_PARAMS", message: "inputUrl \uD544\uC694" };
@@ -47248,6 +47257,11 @@ function registerCommands(ctx, getSignal2, app) {
     },
     returns: "{ requested, resolved }",
     message: () => "\uC7AC\uC0DD\uC744 \uC694\uCCAD\uD588\uC2B5\uB2C8\uB2E4.",
+    // 재생 요청 직후 상태 확인·클립 저장으로 이어질 수 있음을 제시(play↔player.state/clip.add 사이클).
+    hint: (d) => d?.requested ? [
+      { cmd: "player.state", why: "\uD604\uC7AC \uC7AC\uC0DD \uC0C1\uD0DC\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+      { cmd: "clip.add", why: "\uC7AC\uC0DD \uC911 \uAD6C\uAC04\uC744 \uD074\uB9BD\uC73C\uB85C \uC800\uC7A5\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+    ] : [],
     danger: "inject",
     handler: async (p) => {
       const input = String(p?.inputUrl ?? "").trim();
@@ -47275,6 +47289,13 @@ function registerCommands(ctx, getSignal2, app) {
     },
     returns: "{ id, item }",
     message: (d) => `\uD074\uB9BD "${d?.item?.title}" \uC744(\uB97C) \uCD94\uAC00\uD588\uC2B5\uB2C8\uB2E4.`,
+    // 추가한 클립을 그 구간으로 바로 반복 재생할 수 있음을 제시(clip.add→play 사이클).
+    hint: (d) => d?.item?.inputUrl ? [
+      {
+        cmd: `sok plugin.soksak-plugin-playbox.play {"inputUrl":"${d.item.inputUrl}","startSec":${d.item.startSec},"endSec":${d.item.endSec}}`,
+        why: "\uCD94\uAC00\uD55C \uD074\uB9BD\uC744 \uAD6C\uAC04 \uBC18\uBCF5 \uC7AC\uC0DD\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4"
+      }
+    ] : [],
     handler: async (p) => {
       const inputUrl = String(p?.inputUrl ?? "").trim();
       const startSec = Number(p?.startSec);
@@ -47351,6 +47372,8 @@ function registerCommands(ctx, getSignal2, app) {
     },
     returns: "{ ok }",
     message: () => "\uD50C\uB808\uC774\uC5B4\uC5D0 \uC801\uC6A9\uD588\uC2B5\uB2C8\uB2E4.",
+    // 적용된 결과를 바로 확인할 수 있음을 제시(player.control→player.state 사이클).
+    hint: (d) => d?.ok ? [{ cmd: "player.state", why: "\uC801\uC6A9\uB41C \uC0C1\uD0DC\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }] : [],
     danger: "inject",
     handler: async (p) => {
       const action = String(p?.action ?? "");
@@ -47384,6 +47407,8 @@ function registerCommands(ctx, getSignal2, app) {
     params: {},
     returns: "{ ytdlp:{found,version}, ffmpeg:{found,version}, ready }",
     message: (d) => d?.ready ? "yt-dlp \uC0AC\uC6A9 \uAC00\uB2A5\uD569\uB2C8\uB2E4." : "yt-dlp \uB97C \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
+    // 부족한 의존성 발견 시 설치 명령을 제시(doctor→setup 사이클).
+    hint: (d) => d?.ready ? [] : [{ cmd: "setup", why: "\uBD80\uC871\uD55C \uC758\uC874\uC131(yt-dlp)\uC744 \uC124\uCE58\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }],
     handler: async () => {
       const [ytdlp, ffmpeg] = await Promise.all([
         probe2(spawn, "yt-dlp", ["--version"]),
@@ -47397,6 +47422,8 @@ function registerCommands(ctx, getSignal2, app) {
     params: { install: { type: "boolean", description: "true \uBA74 \uC2E4\uC81C \uC124\uCE58 \uC2E4\uD589(\uAE30\uBCF8 false=\uACC4\uD68D\uB9CC)" } },
     returns: "{ ytdlp, ffmpeg, actions, installed? }",
     message: (d) => d?.installed ? "\uC124\uCE58\uB97C \uC2DC\uB3C4\uD588\uC2B5\uB2C8\uB2E4." : `\uC124\uCE58 \uACC4\uD68D ${(d?.actions ?? []).length}\uAC74.`,
+    // 계획만 반환된 경우 실제 설치 실행을 제시(setup(계획)→setup(install:true) 사이클).
+    hint: (d) => !d?.installed && (d?.actions?.length ?? 0) > 0 ? [{ cmd: 'sok plugin.soksak-plugin-playbox.setup {"install":true}', why: "\uC81C\uC548\uB41C \uC124\uCE58\uB97C \uBC14\uB85C \uC2E4\uD589\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }] : [],
     danger: "inject",
     handler: async (p) => {
       const doInstall = p?.install === true;
