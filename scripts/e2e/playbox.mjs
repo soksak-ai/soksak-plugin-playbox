@@ -236,9 +236,9 @@ async function main() {
   // 같은 프로젝트를 두 창에 펼치면 한 창의 변경이 app.data.watch 로 다른 창 store 에 동기된다. 각 창은 그
   // 프로젝트의 별도 store 인스턴스지만 같은 scope 를 watch(위 G 의 scope 격리가 그 전제). rpc 4번째 인자로
   // window 타깃 가능(ipc.rs window: Option). 자동 E2E 에선 (1) 백그라운드 새 창이 occlusion 으로 JS
-  // throttle 돼 watch 콜백이 불가측 지연, (2) window.new/focus 가 다른 섹션 라우팅을 교란해 불안정 →
+  // throttle 돼 watch 콜백이 불가측 지연, (2) window.open/focus 가 다른 섹션 라우팅을 교란해 불안정 →
   // 하드 단언 제외. 라이브 재현(검증 완료):
-  //   sok window.new                                   # 같은 활성 프로젝트로 새 창
+  //   sok window.open                                  # 같은 활성 프로젝트로 새 창
   //   SOKSAK_WINDOW=<win> sok plugin.<id>.view.open '{"view":"<id>.library"}'
   //   sok window.focus  (또는 새 창 보이게)            # occlusion throttle 해제
   //   sok plugin.<id>.clip.add '{...}'                 # 한 창에서
