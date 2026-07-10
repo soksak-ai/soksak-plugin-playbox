@@ -118,7 +118,10 @@
         "placements": [
           "content"
         ],
-        "defaultPlacement": "content"
+        "defaultPlacement": "content",
+        "status": [
+          "busy"
+        ]
       }
     ],
     "commands": [
