@@ -250,6 +250,9 @@ async function main() {
   // 되는지 — 재생→클립→라이브러리 전 경로를 실영상으로 검증(인텐트/가짜URL 아님).
   await rpc("window.focus").catch(() => {}); // occlusion 해제(단일 창) — 비디오 throttle 방지
   await sleep(500);
+  // 표면 baseline — 이 실행이 여는 뷰만 나중에 회수한다. 회수 없는 하니스는 자기 산출물을 다음
+  // 실행(그리고 다른 레인)에 떠넘긴다: 데이터 축만 되돌리고 표면을 흘리면 창은 계속 자란다.
+  surfaceBaseline = await viewIds();
   await rpc("plugin.view.open", { view: `${PLUGIN_ID}.player`, placement: "content" }).catch(() => {});
   await rpc("plugin.view.open", { view: `${PLUGIN_ID}.library` }).catch(() => {});
   await sleep(800);
@@ -402,9 +405,30 @@ async function main() {
   ok(restored.count === baseline, "library.list baseline 복원", { baseline, now: restored.count });
   ok(!restored.items.some((i) => String(i.inputUrl).includes(MARKER)), "마커 잔재 0(멱등)", restored.count);
 
+  await reclaimSurface();
+
   console.log(`\n${pass} passed, ${fail} failed`);
   sock.end();
   process.exit(fail ? 1 : 0);
+}
+
+// ── 표면 회수 ────────────────────────────────────────────────────────────────
+// 이 실행이 연 뷰만 닫는다(baseline 밖의 것). 남의 뷰는 건드리지 않는다 — 회수는 자기 산출물에
+// 대한 것이지 화면 청소가 아니다.
+let surfaceBaseline = [];
+
+async function viewIds() {
+  const out = await rpc("view.list").catch(() => null);
+  const views = (out && (out.views || (out.data && out.data.views))) || [];
+  return views.map((v) => v.id);
+}
+
+async function reclaimSurface() {
+  const base = surfaceBaseline;
+  const now = await viewIds();
+  for (const id of now) {
+    if (!base.includes(id)) await rpc("view.close", { view: id }).catch(() => {});
+  }
 }
 
 main().catch((e) => {
