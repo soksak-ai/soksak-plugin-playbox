@@ -11,10 +11,35 @@ interface SniffHit {
   ref?: string;
 }
 
-// 코어 execute 결과는 {ok, result?} 또는 직접 객체일 수 있어 평탄화.
+// 명령의 답은 봉투다 — 사실은 data 안에 있다(MESSAGE-PROTOCOL). 봉투면 data 를, 구형이면 result 를,
+// 그 밖이면 그대로.
 function unwrap(out: any): any {
-  if (out && typeof out === "object" && "result" in out && out.result !== undefined) return out.result;
+  if (!out || typeof out !== "object") return out;
+  if (out.data !== undefined) return out.data;
+  if ("result" in out && out.result !== undefined) return out.result;
   return out;
+}
+
+// 페이지를 가진 플러그인을 계약으로 찾는다(soksak-browser-spec). 구현체의 이름은 모른다 —
+// 알면 그건 계약이 아니라 이름-핀이다(coupling C3). 없으면 크게 거절한다(조용한 폴백 없음).
+const BROWSER_CONTRACT = "soksak-browser-spec";
+let cachedProvider: string | null = null;
+async function browserProvider(app: any): Promise<string | null> {
+  if (cachedProvider) return cachedProvider;
+  const r = await app.commands.execute("plugin.implementers", { contract: BROWSER_CONTRACT });
+  const list = ((r && (r.data || r)).implementers as any[]) || [];
+  const live = list.find((i) => i && i.status === "enabled");
+  cachedProvider = live ? live.id : null;
+  return cachedProvider;
+}
+// 발견된 브라우저의 명령을 부른다. open/eval 은 계약이 보증하고(반드시 있다), media.* 는 계약 밖
+// 확장이라 구현체가 등록했으면 쓰고 아니면 UNKNOWN_COMMAND 를 그대로 돌려준다(호출부가 폴백한다).
+async function callBrowser(app: any, name: string, params: any): Promise<any> {
+  const id = await browserProvider(app);
+  if (!id) return { ok: false, code: "NO_BROWSER", message: `no plugin implements ${BROWSER_CONTRACT}` };
+  const r = await app.commands.execute(`plugin.${id}.${name}`, params);
+  if (r && r.code === "UNKNOWN_COMMAND") cachedProvider = null; // 구현체가 사라졌다면 다시 찾는다
+  return r;
 }
 
 // 여러 m3u8 중 변형(variant)보다 마스터 우선이 안전(hls.js 가 트랙 선택). 휴리스틱 — 가장 짧은 경로 깊이.
@@ -75,7 +100,7 @@ export async function resolveViaWebviewHidden(
   timeoutMs: number,
 ): Promise<Resolved> {
   try {
-    const out = unwrap(await app.commands.execute("browser.media.extract", { url, timeoutMs }));
+    const out = unwrap(await callBrowser(app, "media.extract", { url, timeoutMs }));
     const urls: SniffHit[] = Array.isArray(out?.urls) ? out.urls : [];
     const best = pickBest(urls);
     if (!best) {
@@ -100,14 +125,14 @@ export async function resolveViaWebview(
 ): Promise<Resolved> {
   let viewId: string | null = null;
   try {
-    const opened = unwrap(await app.commands.execute("browser.open", { url, where: "panel" }));
+    const opened = unwrap(await callBrowser(app, "open", { url, where: "panel" }));
     viewId = opened?.viewId ?? opened?.view?.id ?? null;
     if (!viewId) {
       return { kind: "unsupported", reason: "브라우저 뷰를 열지 못함", source: "webview" };
     }
     const sniffed = unwrap(
-      await app.commands.execute("browser.media.sniff", {
-        view: viewId,
+      await callBrowser(app, "media.sniff", {
+        viewId,
         pattern: "m3u8|mp4|mpd",
         timeoutMs,
         autoplay: true,
@@ -150,7 +175,7 @@ export async function resolveViaWebview(
 export async function resolveViaIframe(app: any, url: string, timeoutMs: number): Promise<Resolved> {
   let viewId: string | null = null;
   try {
-    const opened = unwrap(await app.commands.execute("browser.open", { url, where: "panel" }));
+    const opened = unwrap(await callBrowser(app, "open", { url, where: "panel" }));
     viewId = opened?.viewId ?? opened?.view?.id ?? null;
     if (!viewId) return { kind: "unsupported", reason: "브라우저 뷰를 열지 못함", source: "webview" };
     const js =
@@ -160,10 +185,10 @@ export async function resolveViaIframe(app: any, url: string, timeoutMs: number)
     const deadline = Date.now() + Math.max(3000, timeoutMs);
     let media: string | null = null;
     while (Date.now() < deadline) {
-      const res = unwrap(await app.commands.execute("browser.eval", { view: viewId, js }).catch(() => null));
+      const res = unwrap(await callBrowser(app, "eval", { viewId, js }).catch(() => null));
       let srcs: unknown = [];
       try {
-        srcs = JSON.parse(typeof res === "string" ? res : (res && (res.result as string)) || "[]");
+        srcs = JSON.parse(typeof res === "string" ? res : (res && (res.value as string)) || "[]");
       } catch {
         srcs = [];
       }

@@ -12,9 +12,9 @@
     "en": "Video library and player — favorites and clips. Plays YouTube, local files, direct media URLs, and arbitrary web pages (via yt-dlp); protected HLS is streamed through the core media proxy."
   },
   "entry": "main.js",
-  "dependencies": {
-    "soksak-plugin-browser-native": "0.0.1"
-  },
+  "consumes": [
+    "soksak-browser-spec"
+  ],
   "configuration": [
     {
       "key": "domainMap",

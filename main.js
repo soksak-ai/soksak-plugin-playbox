@@ -13031,8 +13031,27 @@ async function resolveUrl(input, spawn, ytdlpPath) {
 
 // src/webview-resolve.ts
 function unwrap(out) {
-  if (out && typeof out === "object" && "result" in out && out.result !== void 0) return out.result;
+  if (!out || typeof out !== "object") return out;
+  if (out.data !== void 0) return out.data;
+  if ("result" in out && out.result !== void 0) return out.result;
   return out;
+}
+var BROWSER_CONTRACT = "soksak-browser-spec";
+var cachedProvider = null;
+async function browserProvider(app) {
+  if (cachedProvider) return cachedProvider;
+  const r = await app.commands.execute("plugin.implementers", { contract: BROWSER_CONTRACT });
+  const list = (r && (r.data || r)).implementers || [];
+  const live = list.find((i) => i && i.status === "enabled");
+  cachedProvider = live ? live.id : null;
+  return cachedProvider;
+}
+async function callBrowser(app, name, params) {
+  const id = await browserProvider(app);
+  if (!id) return { ok: false, code: "NO_BROWSER", message: `no plugin implements ${BROWSER_CONTRACT}` };
+  const r = await app.commands.execute(`plugin.${id}.${name}`, params);
+  if (r && r.code === "UNKNOWN_COMMAND") cachedProvider = null;
+  return r;
 }
 function pickBest(urls) {
   const m3u8 = urls.filter((u) => /\.m3u8(\?|#|$)/i.test(u.url));
@@ -13075,7 +13094,7 @@ function pickEmbedMedia(srcs) {
 }
 async function resolveViaWebviewHidden(app, url, timeoutMs) {
   try {
-    const out = unwrap(await app.commands.execute("browser.media.extract", { url, timeoutMs }));
+    const out = unwrap(await callBrowser(app, "media.extract", { url, timeoutMs }));
     const urls = Array.isArray(out?.urls) ? out.urls : [];
     const best = pickBest(urls);
     if (!best) {
@@ -13094,14 +13113,14 @@ async function resolveViaWebviewHidden(app, url, timeoutMs) {
 async function resolveViaWebview(app, url, timeoutMs) {
   let viewId = null;
   try {
-    const opened = unwrap(await app.commands.execute("browser.open", { url, where: "panel" }));
+    const opened = unwrap(await callBrowser(app, "open", { url, where: "panel" }));
     viewId = opened?.viewId ?? opened?.view?.id ?? null;
     if (!viewId) {
       return { kind: "unsupported", reason: "\uBE0C\uB77C\uC6B0\uC800 \uBDF0\uB97C \uC5F4\uC9C0 \uBABB\uD568", source: "webview" };
     }
     const sniffed = unwrap(
-      await app.commands.execute("browser.media.sniff", {
-        view: viewId,
+      await callBrowser(app, "media.sniff", {
+        viewId,
         pattern: "m3u8|mp4|mpd",
         timeoutMs,
         autoplay: true
@@ -13138,17 +13157,17 @@ async function resolveViaWebview(app, url, timeoutMs) {
 async function resolveViaIframe(app, url, timeoutMs) {
   let viewId = null;
   try {
-    const opened = unwrap(await app.commands.execute("browser.open", { url, where: "panel" }));
+    const opened = unwrap(await callBrowser(app, "open", { url, where: "panel" }));
     viewId = opened?.viewId ?? opened?.view?.id ?? null;
     if (!viewId) return { kind: "unsupported", reason: "\uBE0C\uB77C\uC6B0\uC800 \uBDF0\uB97C \uC5F4\uC9C0 \uBABB\uD568", source: "webview" };
     const js = "var out=[];document.querySelectorAll('iframe').forEach(function(f){if(f.src)out.push(f.src)});document.querySelectorAll('video,source').forEach(function(v){var s=v.currentSrc||v.src;if(s)out.push(s)});return JSON.stringify(out)";
     const deadline = Date.now() + Math.max(3e3, timeoutMs);
     let media = null;
     while (Date.now() < deadline) {
-      const res = unwrap(await app.commands.execute("browser.eval", { view: viewId, js }).catch(() => null));
+      const res = unwrap(await callBrowser(app, "eval", { viewId, js }).catch(() => null));
       let srcs = [];
       try {
-        srcs = JSON.parse(typeof res === "string" ? res : res && res.result || "[]");
+        srcs = JSON.parse(typeof res === "string" ? res : res && res.value || "[]");
       } catch {
         srcs = [];
       }
