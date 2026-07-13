@@ -20,9 +20,9 @@ function unwrap(out: any): any {
   return out;
 }
 
-// 페이지를 가진 플러그인을 계약으로 찾는다(soksak-browser-spec). 구현체의 이름은 모른다 —
+// 페이지를 가진 플러그인을 계약으로 찾는다(soksak-spec-plugin-browser). 구현체의 이름은 모른다 —
 // 알면 그건 계약이 아니라 이름-핀이다(coupling C3). 없으면 크게 거절한다(조용한 폴백 없음).
-const BROWSER_CONTRACT = "soksak-browser-spec";
+const BROWSER_CONTRACT = "soksak-spec-plugin-browser";
 let cachedProvider: string | null = null;
 async function browserProvider(app: any): Promise<string | null> {
   if (cachedProvider) return cachedProvider;
