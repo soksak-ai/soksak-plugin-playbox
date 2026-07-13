@@ -13,7 +13,10 @@
   },
   "entry": "main.js",
   "consumes": [
-    "soksak-browser-spec"
+    {
+      "id": "soksak-spec-plugin-browser",
+      "range": "0.0.1"
+    }
   ],
   "configuration": [
     {

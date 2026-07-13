@@ -13036,7 +13036,7 @@ function unwrap(out) {
   if ("result" in out && out.result !== void 0) return out.result;
   return out;
 }
-var BROWSER_CONTRACT = "soksak-browser-spec";
+var BROWSER_CONTRACT = "soksak-spec-plugin-browser";
 var cachedProvider = null;
 async function browserProvider(app) {
   if (cachedProvider) return cachedProvider;
