@@ -8,13 +8,20 @@ import type { SpawnFn, SpawnResult } from "./resolve";
 describe("resolveFull", () => {
   const failYtdlp: SpawnFn = () => Promise.resolve({ code: 1, stdout: "", stderr: "HTTP 403 cloudflare" });
   it("yt-dlp 실패 http 페이지 → webview 스니프(hidden)로 m3u8", async () => {
+    // 브라우저는 계약으로 발견된다: plugin.implementers → 그 id 로 media.extract 를 부른다.
+    // 옛 이름 browser.media.extract 는 어디에도 없다(그 이름은 죽었다).
     const app = {
       settings: { get: (k: string) => (k === "extractMode" ? "hidden" : k === "sniffTimeoutMs" ? 5000 : undefined) },
       commands: {
-        execute: (m: string) =>
-          m === "browser.media.extract"
-            ? Promise.resolve({ urls: [{ url: "https://cdn.site/s/play.m3u8" }] })
-            : Promise.resolve({}),
+        execute: (m: string) => {
+          if (m === "plugin.implementers") {
+            return Promise.resolve({ ok: true, data: { implementers: [{ id: "soksak-plugin-browser-native", status: "enabled" }] } });
+          }
+          if (m === "plugin.soksak-plugin-browser-native.media.extract") {
+            return Promise.resolve({ ok: true, data: { urls: [{ url: "https://cdn.site/s/play.m3u8" }] } });
+          }
+          return Promise.resolve({ ok: true });
+        },
       },
     };
     const { resolved } = await resolveFull(app, "https://example.com/video/123", failYtdlp);
