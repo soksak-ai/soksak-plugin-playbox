@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "description": "soksak Playbox — video library + player (favorites, clips) with HLS/MP4/YouTube/local playback via the core media proxy and yt-dlp",
+  "description": "soksak Playbox \u2014 video library + player (favorites, clips) with HLS/MP4/YouTube/local playback via the core media proxy and yt-dlp",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",
@@ -28,5 +28,11 @@
     "typescript": "~5.9.3",
     "vitest": "^2.1.8",
     "soksak-plugin-doctor": "github:soksak-ai/soksak-plugin-doctor"
+  },
+  "soksakRelease": {
+    "kind": "plugin",
+    "id": "soksak-plugin-playbox",
+    "repository": "https://github.com/soksak-ai/soksak-plugin-playbox",
+    "manifest": "release.json"
   }
 }

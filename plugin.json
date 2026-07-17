@@ -2,14 +2,13 @@
   "spec": "soksak-spec-plugin@0.0.1",
   "id": "soksak-plugin-playbox",
   "name": {
-    "ko": "플레이박스",
+    "ko": "\ud50c\ub808\uc774\ubc15\uc2a4",
     "en": "Playbox"
   },
   "version": "0.0.1",
-  "repo": "https://github.com/soksak-ai/soksak-plugin-playbox.git",
   "description": {
-    "ko": "비디오 라이브러리·플레이어 — 즐겨찾기·클립. YouTube·로컬 파일·직접 미디어 URL·임의 웹페이지(yt-dlp 경유)를 재생하고, 보호된 HLS 는 코어 미디어 프록시로 스트리밍.",
-    "en": "Video library and player — favorites and clips. Plays YouTube, local files, direct media URLs, and arbitrary web pages (via yt-dlp); protected HLS is streamed through the core media proxy."
+    "ko": "\ube44\ub514\uc624 \ub77c\uc774\ube0c\ub7ec\ub9ac\u00b7\ud50c\ub808\uc774\uc5b4 \u2014 \uc990\uaca8\ucc3e\uae30\u00b7\ud074\ub9bd. YouTube\u00b7\ub85c\uceec \ud30c\uc77c\u00b7\uc9c1\uc811 \ubbf8\ub514\uc5b4 URL\u00b7\uc784\uc758 \uc6f9\ud398\uc774\uc9c0(yt-dlp \uacbd\uc720)\ub97c \uc7ac\uc0dd\ud558\uace0, \ubcf4\ud638\ub41c HLS \ub294 \ucf54\uc5b4 \ubbf8\ub514\uc5b4 \ud504\ub85d\uc2dc\ub85c \uc2a4\ud2b8\ub9ac\ubc0d.",
+    "en": "Video library and player \u2014 favorites and clips. Plays YouTube, local files, direct media URLs, and arbitrary web pages (via yt-dlp); protected HLS is streamed through the core media proxy."
   },
   "entry": "main.js",
   "consumes": [
@@ -24,12 +23,12 @@
       "type": "map",
       "default": [],
       "title": {
-        "ko": "도메인 매핑",
+        "ko": "\ub3c4\uba54\uc778 \ub9e4\ud551",
         "en": "Domain mapping"
       },
       "description": {
-        "ko": "원본 호스트 → 미러 호스트. 접속 차단 호스트를 접속 가능한 미러 호스트로 치환합니다. + 추가로 여러 개, ✕ 로 삭제.",
-        "en": "Original host → mirror host. Replace a blocked host with a reachable mirror. Use + to add, ✕ to remove."
+        "ko": "\uc6d0\ubcf8 \ud638\uc2a4\ud2b8 \u2192 \ubbf8\ub7ec \ud638\uc2a4\ud2b8. \uc811\uc18d \ucc28\ub2e8 \ud638\uc2a4\ud2b8\ub97c \uc811\uc18d \uac00\ub2a5\ud55c \ubbf8\ub7ec \ud638\uc2a4\ud2b8\ub85c \uce58\ud658\ud569\ub2c8\ub2e4. + \ucd94\uac00\ub85c \uc5ec\ub7ec \uac1c, \u2715 \ub85c \uc0ad\uc81c.",
+        "en": "Original host \u2192 mirror host. Replace a blocked host with a reachable mirror. Use + to add, \u2715 to remove."
       }
     },
     {
@@ -42,20 +41,20 @@
       ],
       "enumLabels": [
         {
-          "ko": "숨김(오프스크린)",
+          "ko": "\uc228\uae40(\uc624\ud504\uc2a4\ud06c\ub9b0)",
           "en": "Hidden (offscreen)"
         },
         {
-          "ko": "탭(보임)",
+          "ko": "\ud0ed(\ubcf4\uc784)",
           "en": "Tab (visible)"
         }
       ],
       "title": {
-        "ko": "추출 방식",
+        "ko": "\ucd94\ucd9c \ubc29\uc2dd",
         "en": "Extract mode"
       },
       "description": {
-        "ko": "웹페이지에서 스트림을 추출하는 방식. 숨김=보이지 않게 오프스크린에서. 탭=브라우저 탭을 띄워 직접 재생을 누를 수 있음(페이지가 클릭을 요구할 때).",
+        "ko": "\uc6f9\ud398\uc774\uc9c0\uc5d0\uc11c \uc2a4\ud2b8\ub9bc\uc744 \ucd94\ucd9c\ud558\ub294 \ubc29\uc2dd. \uc228\uae40=\ubcf4\uc774\uc9c0 \uc54a\uac8c \uc624\ud504\uc2a4\ud06c\ub9b0\uc5d0\uc11c. \ud0ed=\ube0c\ub77c\uc6b0\uc800 \ud0ed\uc744 \ub744\uc6cc \uc9c1\uc811 \uc7ac\uc0dd\uc744 \ub204\ub97c \uc218 \uc788\uc74c(\ud398\uc774\uc9c0\uac00 \ud074\ub9ad\uc744 \uc694\uad6c\ud560 \ub54c).",
         "en": "How to extract a stream from a web page. Hidden = offscreen, invisible. Tab = open a visible browser tab so you can click play (for pages that require interaction)."
       }
     },
@@ -66,11 +65,11 @@
       "min": 3000,
       "max": 60000,
       "title": {
-        "ko": "추출 대기(ms)",
+        "ko": "\ucd94\ucd9c \ub300\uae30(ms)",
         "en": "Extract wait (ms)"
       },
       "description": {
-        "ko": "웹페이지에서 미디어 스트림을 추출할 때 최대 대기 시간.",
+        "ko": "\uc6f9\ud398\uc774\uc9c0\uc5d0\uc11c \ubbf8\ub514\uc5b4 \uc2a4\ud2b8\ub9bc\uc744 \ucd94\ucd9c\ud560 \ub54c \ucd5c\ub300 \ub300\uae30 \uc2dc\uac04.",
         "en": "Maximum wait when extracting a media stream from a web page."
       }
     },
@@ -79,11 +78,11 @@
       "type": "string",
       "default": "",
       "title": {
-        "ko": "다운로드 폴더",
+        "ko": "\ub2e4\uc6b4\ub85c\ub4dc \ud3f4\ub354",
         "en": "Download folder"
       },
       "description": {
-        "ko": "다운로드를 저장할 폴더(절대경로). 비어 있으면 다운로드 버튼이 폴더 지정을 요청합니다.",
+        "ko": "\ub2e4\uc6b4\ub85c\ub4dc\ub97c \uc800\uc7a5\ud560 \ud3f4\ub354(\uc808\ub300\uacbd\ub85c). \ube44\uc5b4 \uc788\uc73c\uba74 \ub2e4\uc6b4\ub85c\ub4dc \ubc84\ud2bc\uc774 \ud3f4\ub354 \uc9c0\uc815\uc744 \uc694\uccad\ud569\ub2c8\ub2e4.",
         "en": "Absolute folder where downloads are saved. If empty, the download button asks you to set it first."
       }
     }
@@ -102,10 +101,10 @@
       {
         "id": "library",
         "title": {
-          "ko": "라이브러리",
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac",
           "en": "Library"
         },
-        "icon": "▶",
+        "icon": "\u25b6",
         "placements": [
           "sidebar-right"
         ],
@@ -114,10 +113,10 @@
       {
         "id": "player",
         "title": {
-          "ko": "플레이어",
+          "ko": "\ud50c\ub808\uc774\uc5b4",
           "en": "Player"
         },
-        "icon": "▷",
+        "icon": "\u25b7",
         "placements": [
           "content"
         ],
@@ -131,21 +130,21 @@
       {
         "name": "ping",
         "title": {
-          "ko": "적재/버전 확인",
+          "ko": "\uc801\uc7ac/\ubc84\uc804 \ud655\uc778",
           "en": "Ping"
         }
       },
       {
         "name": "favorite.add",
         "title": {
-          "ko": "즐겨찾기 추가",
+          "ko": "\uc990\uaca8\ucc3e\uae30 \ucd94\uac00",
           "en": "Add favorite"
         }
       },
       {
         "name": "favorite.remove",
         "title": {
-          "ko": "항목 삭제",
+          "ko": "\ud56d\ubaa9 \uc0ad\uc81c",
           "en": "Remove item"
         },
         "danger": "destructive"
@@ -153,28 +152,28 @@
       {
         "name": "library.list",
         "title": {
-          "ko": "라이브러리 목록",
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \ubaa9\ub85d",
           "en": "List library"
         }
       },
       {
         "name": "library.filter",
         "title": {
-          "ko": "라이브러리 필터",
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \ud544\ud130",
           "en": "Filter library"
         }
       },
       {
         "name": "resolve",
         "title": {
-          "ko": "URL 해석",
+          "ko": "URL \ud574\uc11d",
           "en": "Resolve URL"
         }
       },
       {
         "name": "play",
         "title": {
-          "ko": "재생",
+          "ko": "\uc7ac\uc0dd",
           "en": "Play"
         },
         "danger": "inject"
@@ -182,35 +181,35 @@
       {
         "name": "clip.add",
         "title": {
-          "ko": "클립 추가",
+          "ko": "\ud074\ub9bd \ucd94\uac00",
           "en": "Add clip"
         }
       },
       {
         "name": "clip.list",
         "title": {
-          "ko": "클립 목록",
+          "ko": "\ud074\ub9bd \ubaa9\ub85d",
           "en": "List clips"
         }
       },
       {
         "name": "clip.update",
         "title": {
-          "ko": "클립 수정",
+          "ko": "\ud074\ub9bd \uc218\uc815",
           "en": "Update clip"
         }
       },
       {
         "name": "player.state",
         "title": {
-          "ko": "재생 상태",
+          "ko": "\uc7ac\uc0dd \uc0c1\ud0dc",
           "en": "Player state"
         }
       },
       {
         "name": "player.control",
         "title": {
-          "ko": "재생 제어",
+          "ko": "\uc7ac\uc0dd \uc81c\uc5b4",
           "en": "Player control"
         },
         "danger": "inject"
@@ -218,7 +217,7 @@
       {
         "name": "download",
         "title": {
-          "ko": "다운로드",
+          "ko": "\ub2e4\uc6b4\ub85c\ub4dc",
           "en": "Download"
         },
         "danger": "inject"
@@ -226,14 +225,14 @@
       {
         "name": "doctor",
         "title": {
-          "ko": "의존성 점검",
+          "ko": "\uc758\uc874\uc131 \uc810\uac80",
           "en": "Doctor"
         }
       },
       {
         "name": "setup",
         "title": {
-          "ko": "의존성 설치",
+          "ko": "\uc758\uc874\uc131 \uc124\uce58",
           "en": "Setup deps"
         },
         "danger": "inject"
@@ -241,7 +240,7 @@
       {
         "name": "debug",
         "title": {
-          "ko": "인스턴스 진단",
+          "ko": "\uc778\uc2a4\ud134\uc2a4 \uc9c4\ub2e8",
           "en": "Debug instance"
         }
       }
@@ -250,11 +249,11 @@
       {
         "id": "playbox",
         "title": {
-          "ko": "플레이박스",
+          "ko": "\ud50c\ub808\uc774\ubc15\uc2a4",
           "en": "Playbox"
         },
         "path": {
-          "ko": "유틸리티",
+          "ko": "\uc720\ud2f8\ub9ac\ud2f0",
           "en": "Utility"
         },
         "kind": "view",
@@ -266,217 +265,217 @@
         "id": "url-input",
         "description": {
           "en": "Video URL input",
-          "ko": "비디오 URL 입력"
+          "ko": "\ube44\ub514\uc624 URL \uc785\ub825"
         }
       },
       {
         "id": "play",
         "description": {
           "en": "Play the entered URL",
-          "ko": "입력 URL 재생"
+          "ko": "\uc785\ub825 URL \uc7ac\uc0dd"
         }
       },
       {
         "id": "open-file",
         "description": {
           "en": "Open file picker",
-          "ko": "파일 선택 열기"
+          "ko": "\ud30c\uc77c \uc120\ud0dd \uc5f4\uae30"
         }
       },
       {
         "id": "dropzone",
         "description": {
           "en": "Drag-drop target for video files",
-          "ko": "동영상 파일 드롭 영역"
+          "ko": "\ub3d9\uc601\uc0c1 \ud30c\uc77c \ub4dc\ub86d \uc601\uc5ed"
         }
       },
       {
         "id": "video",
         "description": {
           "en": "The video element",
-          "ko": "비디오 요소"
+          "ko": "\ube44\ub514\uc624 \uc694\uc18c"
         }
       },
       {
         "id": "playstate",
         "description": {
           "en": "Live playback state (currentTime centisec/paused/readyState)",
-          "ko": "실재생 상태(currentTime 센티초/일시정지/readyState)"
+          "ko": "\uc2e4\uc7ac\uc0dd \uc0c1\ud0dc(currentTime \uc13c\ud2f0\ucd08/\uc77c\uc2dc\uc815\uc9c0/readyState)"
         }
       },
       {
         "id": "clipstate",
         "description": {
           "en": "Clip segment/loop state (start centisec/end centisec/loop)",
-          "ko": "클립 구간/반복 상태(시작 센티초/끝 센티초/반복)"
+          "ko": "\ud074\ub9bd \uad6c\uac04/\ubc18\ubcf5 \uc0c1\ud0dc(\uc2dc\uc791 \uc13c\ud2f0\ucd08/\ub05d \uc13c\ud2f0\ucd08/\ubc18\ubcf5)"
         }
       },
       {
         "id": "loop",
         "description": {
           "en": "Toggle clip segment repeat",
-          "ko": "클립 구간 반복 토글"
+          "ko": "\ud074\ub9bd \uad6c\uac04 \ubc18\ubcf5 \ud1a0\uae00"
         }
       },
       {
         "id": "frame",
         "description": {
           "en": "The embedded player iframe",
-          "ko": "임베드 플레이어"
+          "ko": "\uc784\ubca0\ub4dc \ud50c\ub808\uc774\uc5b4"
         }
       },
       {
         "id": "clip-start",
         "description": {
           "en": "Mark clip start",
-          "ko": "클립 시작 표시"
+          "ko": "\ud074\ub9bd \uc2dc\uc791 \ud45c\uc2dc"
         }
       },
       {
         "id": "clip-end",
         "description": {
           "en": "Mark clip end and save",
-          "ko": "클립 끝 표시·저장"
+          "ko": "\ud074\ub9bd \ub05d \ud45c\uc2dc\u00b7\uc800\uc7a5"
         }
       },
       {
         "id": "close",
         "description": {
           "en": "Close current media",
-          "ko": "현재 미디어 닫기"
+          "ko": "\ud604\uc7ac \ubbf8\ub514\uc5b4 \ub2eb\uae30"
         }
       },
       {
         "id": "download",
         "description": {
           "en": "Download current media (full or marked clip)",
-          "ko": "현재 미디어 저장(전체 또는 표시 구간)"
+          "ko": "\ud604\uc7ac \ubbf8\ub514\uc5b4 \uc800\uc7a5(\uc804\uccb4 \ub610\ub294 \ud45c\uc2dc \uad6c\uac04)"
         }
       },
       {
         "id": "flash",
         "description": {
           "en": "Transient status message",
-          "ko": "일시 상태 메시지"
+          "ko": "\uc77c\uc2dc \uc0c1\ud0dc \uba54\uc2dc\uc9c0"
         }
       },
       {
         "id": "error",
         "description": {
           "en": "Resolve/playback error message",
-          "ko": "해석/재생 오류 메시지"
+          "ko": "\ud574\uc11d/\uc7ac\uc0dd \uc624\ub958 \uba54\uc2dc\uc9c0"
         }
       },
       {
         "id": "lib-input",
         "description": {
           "en": "Library add-URL input",
-          "ko": "라이브러리 URL 추가 입력"
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac URL \ucd94\uac00 \uc785\ub825"
         }
       },
       {
         "id": "lib-add",
         "description": {
           "en": "Add favorite button",
-          "ko": "즐겨찾기 추가 버튼"
+          "ko": "\uc990\uaca8\ucc3e\uae30 \ucd94\uac00 \ubc84\ud2bc"
         }
       },
       {
         "id": "lib-filter",
         "description": {
           "en": "Library filter input",
-          "ko": "라이브러리 필터 입력"
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \ud544\ud130 \uc785\ub825"
         }
       },
       {
         "id": "lib-kind",
         "description": {
           "en": "Library kind filter (all/favorite/clip)",
-          "ko": "라이브러리 종류 필터"
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \uc885\ub958 \ud544\ud130"
         }
       },
       {
         "id": "list",
         "description": {
           "en": "Library list container",
-          "ko": "라이브러리 목록"
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \ubaa9\ub85d"
         }
       },
       {
         "id": "item",
         "description": {
           "en": "Library row (item/<id>)",
-          "ko": "라이브러리 행"
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \ud589"
         }
       },
       {
         "id": "edit",
         "description": {
           "en": "Edit clip start/end button (edit/<id>)",
-          "ko": "클립 시작/종료 수정 버튼"
+          "ko": "\ud074\ub9bd \uc2dc\uc791/\uc885\ub8cc \uc218\uc815 \ubc84\ud2bc"
         }
       },
       {
         "id": "edit-panel",
         "description": {
           "en": "Inline clip edit panel (edit-panel/<id>)",
-          "ko": "클립 인라인 편집 패널"
+          "ko": "\ud074\ub9bd \uc778\ub77c\uc778 \ud3b8\uc9d1 \ud328\ub110"
         }
       },
       {
         "id": "clip-edit-start",
         "description": {
           "en": "Clip edit start input (sec.cs)",
-          "ko": "클립 편집 시작 입력(초.00)"
+          "ko": "\ud074\ub9bd \ud3b8\uc9d1 \uc2dc\uc791 \uc785\ub825(\ucd08.00)"
         }
       },
       {
         "id": "clip-edit-end",
         "description": {
           "en": "Clip edit end input (sec.cs)",
-          "ko": "클립 편집 종료 입력(초.00)"
+          "ko": "\ud074\ub9bd \ud3b8\uc9d1 \uc885\ub8cc \uc785\ub825(\ucd08.00)"
         }
       },
       {
         "id": "clip-edit-save",
         "description": {
           "en": "Save clip edit",
-          "ko": "클립 편집 저장"
+          "ko": "\ud074\ub9bd \ud3b8\uc9d1 \uc800\uc7a5"
         }
       },
       {
         "id": "clip-edit-cancel",
         "description": {
           "en": "Cancel clip edit",
-          "ko": "클립 편집 취소"
+          "ko": "\ud074\ub9bd \ud3b8\uc9d1 \ucde8\uc18c"
         }
       },
       {
         "id": "lib-flash",
         "description": {
           "en": "Library transient status message",
-          "ko": "라이브러리 상태 메시지"
+          "ko": "\ub77c\uc774\ube0c\ub7ec\ub9ac \uc0c1\ud0dc \uba54\uc2dc\uc9c0"
         }
       },
       {
         "id": "dlstate",
         "description": {
           "en": "Download result state (idle/busy/ok/fail)",
-          "ko": "다운로드 결과 상태"
+          "ko": "\ub2e4\uc6b4\ub85c\ub4dc \uacb0\uacfc \uc0c1\ud0dc"
         }
       },
       {
         "id": "remove",
         "description": {
           "en": "Remove row button (remove/<id>)",
-          "ko": "행 삭제 버튼"
+          "ko": "\ud589 \uc0ad\uc81c \ubc84\ud2bc"
         }
       },
       {
         "id": "debug",
         "description": {
           "en": "Instance/scope diagnostic (instanceId|scope|count)",
-          "ko": "인스턴스/scope 진단"
+          "ko": "\uc778\uc2a4\ud134\uc2a4/scope \uc9c4\ub2e8"
         }
       }
     ]
