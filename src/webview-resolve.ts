@@ -26,7 +26,7 @@ const BROWSER_CONTRACT = "soksak-spec-plugin-browser";
 let cachedProvider: string | null = null;
 async function browserProvider(app: any): Promise<string | null> {
   if (cachedProvider) return cachedProvider;
-  const r = await app.commands.execute("plugin.implementers", { contract: BROWSER_CONTRACT });
+  const r = await app.commands.execute("plugin.implementers", { id: BROWSER_CONTRACT });
   const list = ((r && (r.data || r)).implementers as any[]) || [];
   const live = list.find((i) => i && i.status === "enabled");
   cachedProvider = live ? live.id : null;

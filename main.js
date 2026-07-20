@@ -13040,7 +13040,7 @@ var BROWSER_CONTRACT = "soksak-spec-plugin-browser";
 var cachedProvider = null;
 async function browserProvider(app) {
   if (cachedProvider) return cachedProvider;
-  const r = await app.commands.execute("plugin.implementers", { contract: BROWSER_CONTRACT });
+  const r = await app.commands.execute("plugin.implementers", { id: BROWSER_CONTRACT });
   const list = (r && (r.data || r)).implementers || [];
   const live = list.find((i) => i && i.status === "enabled");
   cachedProvider = live ? live.id : null;
