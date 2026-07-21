@@ -106,9 +106,9 @@
         },
         "icon": "\u25b6",
         "placements": [
-          "sidebar-right"
+          "rail"
         ],
-        "defaultPlacement": "sidebar-right"
+        "defaultPlacement": "rail"
       },
       {
         "id": "player",
@@ -120,6 +120,14 @@
         "placements": [
           "content"
         ],
+        "sidebar": {
+          "left": [
+            {
+              "ref": "self.library",
+              "instance": "shared"
+            }
+          ]
+        },
         "defaultPlacement": "content",
         "status": [
           "busy"
