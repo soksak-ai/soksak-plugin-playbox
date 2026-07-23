@@ -47063,7 +47063,9 @@ var GLOBAL_CSS = `
 }
 .pb-header {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-bottom: 1px solid var(--bd, #333); font-weight: 600;
+  /* \uD234\uBC14 \uD589 \uACC4\uC57D(\uCF54\uC5B4 PLUGIN-CONTRACT \xA7Toolbar row) \u2014 \uCE58\uC218\uB294 \uD14C\uB9C8 \uD1A0\uD070 \uC18C\uC720. */
+  height: var(--toolbar-h, 28px);
+  padding: 0 var(--toolbar-pad-x, 8px); border-bottom: 1px solid var(--bd, #333); font-weight: 600;
   flex: 0 0 auto;
 }
 .pb-header .pb-icon { opacity: 0.8; }

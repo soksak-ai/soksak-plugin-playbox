@@ -10,7 +10,9 @@ export const GLOBAL_CSS = `
 }
 .pb-header {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-bottom: 1px solid var(--bd, #333); font-weight: 600;
+  /* 툴바 행 계약(코어 PLUGIN-CONTRACT §Toolbar row) — 치수는 테마 토큰 소유. */
+  height: var(--toolbar-h, 28px);
+  padding: 0 var(--toolbar-pad-x, 8px); border-bottom: 1px solid var(--bd, #333); font-weight: 600;
   flex: 0 0 auto;
 }
 .pb-header .pb-icon { opacity: 0.8; }
